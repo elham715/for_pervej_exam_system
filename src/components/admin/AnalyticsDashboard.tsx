@@ -27,11 +27,9 @@ export function AnalyticsDashboard() {
   
   // Admin analytics
   const [systemAnalytics, setSystemAnalytics] = useState<any>(null);
-  const [examUsageStats, setExamUsageStats] = useState<any[]>([]);
   const [topPerformingTopics, setTopPerformingTopics] = useState<any[]>([]);
 
   const [systemAnalyticsError, setSystemAnalyticsError] = useState<string | null>(null);
-  const [examUsageError, setExamUsageError] = useState<string | null>(null);
   const [topTopicsError, setTopTopicsError] = useState<string | null>(null);
 
   const isAdmin = userData?.role === 'ADMIN';
@@ -47,7 +45,6 @@ export function AnalyticsDashboard() {
       setLoading(true);
       setError(null);
       setSystemAnalyticsError(null);
-      setExamUsageError(null);
       setTopTopicsError(null);
 
       const safeArray = (value: any): any[] => (Array.isArray(value) ? value : []);
@@ -56,33 +53,18 @@ export function AnalyticsDashboard() {
         // Load admin analytics with individual error handling
         try {
           const system = await analyticsApi.getSystemAnalytics();
+          console.log('System analytics response:', system);
           setSystemAnalytics(system);
         } catch (err: any) {
           console.error('Error loading system analytics:', err);
           setSystemAnalyticsError(err?.message || 'Failed to load system analytics');
-          // Set empty data instead of failing completely
-          setSystemAnalytics({
-            total_users: 0,
-            enrolled_users: 0,
-            total_exams: 0,
-            total_attempts: 0,
-            completed_attempts: 0,
-            average_system_score: 0,
-            most_popular_topics: []
-          });
-        }
-
-        try {
-          const usage = await analyticsApi.getExamUsageStats();
-          setExamUsageStats(safeArray(usage));
-        } catch (err: any) {
-          console.error('Error loading exam usage stats:', err);
-          setExamUsageError(err?.message || 'Failed to load exam usage statistics');
-          setExamUsageStats([]);
+          // Don't set system analytics on error - keep it null
+          setSystemAnalytics(null);
         }
 
         try {
           const topTopics = await analyticsApi.getTopPerformingTopics();
+          console.log('Top topics response:', topTopics);
           setTopPerformingTopics(safeArray(topTopics));
         } catch (err: any) {
           console.error('Error loading top topics:', err);
@@ -94,6 +76,7 @@ export function AnalyticsDashboard() {
       // Load user analytics with individual error handling
       try {
         const performance = await analyticsApi.getUserPerformance(userData.id);
+        console.log('User performance response:', performance);
         setUserPerformance(performance);
       } catch (err: any) {
         console.error('Error loading user performance:', err);
@@ -181,7 +164,7 @@ export function AnalyticsDashboard() {
       </div>
 
       {/* System Analytics (Admin Only) */}
-      {isAdmin && systemAnalytics && (
+      {isAdmin && (
         <div className="space-y-6">
           <h3 className="text-lg font-semibold text-gray-900">System Overview</h3>
 
@@ -192,6 +175,17 @@ export function AnalyticsDashboard() {
               </p>
             </div>
           )}
+
+          {!systemAnalytics && !systemAnalyticsError && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-blue-800 text-sm">
+                Loading system analytics...
+              </p>
+            </div>
+          )}
+
+          {systemAnalytics && (
+            <>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow-md p-6">
@@ -249,61 +243,6 @@ export function AnalyticsDashboard() {
             </div>
           </div>
 
-          {/* Exam Usage Stats */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h4 className="text-lg font-semibold text-gray-900 mb-4">Exam Usage Statistics</h4>
-            {examUsageError && (
-              <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-yellow-800 text-sm">{examUsageError}</p>
-              </div>
-            )}
-            {examUsageStats.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Exam</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attempts</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unique Users</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Completion Rate</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Avg Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {examUsageStats.map((exam) => (
-                      <tr key={exam.exam_id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {exam.exam_title}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {exam.total_attempts}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {exam.unique_users}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {(exam.completion_rate ?? 0).toFixed(1)}%
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {(exam.average_score ?? 0).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                <p>
-                  {examUsageError
-                    ? 'Exam usage stats could not be loaded.'
-                    : 'No exam attempts yet. Create and share exams to see usage statistics.'}
-                </p>
-              </div>
-            )}
-          </div>
-
           {/* Top Performing Topics */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h4 className="text-lg font-semibold text-gray-900 mb-4">Top Performing Topics</h4>
@@ -342,6 +281,8 @@ export function AnalyticsDashboard() {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 

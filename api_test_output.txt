@@ -1,0 +1,67 @@
+API_BASE_URL=http://localhost:8000/api/v1
+jq: available
+\n--- SYSTEM ---
+\n==> GET http://localhost:8000/health
+{"ok":true,"timestamp":"2025-12-19T09:28:18.477Z","services":{"database":{"status":"healthy","responseTime":759},"environment":{"status":"healthy"}},"uptime":1497.187476915,"version":"1.0.0"}
+HTTP 200
+\n--- AUTH/PROFILE ---
+\n==> GET http://localhost:8000/api/v1/me
+HTTP 200
+Detected role: ADMIN (email: parvejshahlabib007@gmail.com, enrolled: true)
+\n--- TOPICS (GET) ---
+\n==> GET http://localhost:8000/api/v1/topics?skip=0&take=5&include_count=true
+HTTP 200
+\n--- QUESTIONS (GET) ---
+\n==> GET http://localhost:8000/api/v1/questions?topic_id=d598b761-17c7-4865-a784-d2ad9264e632&skip=0&take=5
+HTTP 200
+\n--- QUESTION SETS (GET) ---
+\n==> GET http://localhost:8000/api/v1/question-sets?skip=0&take=5
+HTTP 200
+\n--- EXAMS (GET) ---
+\n==> GET http://localhost:8000/api/v1/exams?skip=0&take=5
+HTTP 200
+\n--- EXAM BY ID (GET) ---
+\n==> GET http://localhost:8000/api/v1/exams/8030292d-07da-4212-92eb-f9188a5bb7a6
+HTTP 200
+\n--- EXAM BY LINK (GET) ---
+\n==> GET http://localhost:8000/api/v1/exams/link/math-exam-1766132450543
+HTTP 200
+\n--- ATTEMPTS (GET) ---
+\n==> GET http://localhost:8000/api/v1/me/attempts?skip=0&take=5
+HTTP 200
+\n--- ATTEMPT DETAILS (GET) ---
+\n==> GET http://localhost:8000/api/v1/attempts/6ae05e32-603d-4f1c-aa04-e68f62c5d10c
+HTTP 200
+\n--- ATTEMPT TOPIC PERFORMANCE (GET) ---
+\n==> GET http://localhost:8000/api/v1/attempts/6ae05e32-603d-4f1c-aa04-e68f62c5d10c/topic-performance
+HTTP 200
+\n--- ATTEMPT TIME REMAINING (GET) ---
+\n==> GET http://localhost:8000/api/v1/attempts/6ae05e32-603d-4f1c-aa04-e68f62c5d10c/time-remaining
+HTTP 200
+\n--- USER ANALYTICS (SELF) ---
+\n==> GET http://localhost:8000/api/v1/analytics/users/e9854dc3-2f9c-4721-8c13-1ff30a707774
+HTTP 200
+\n==> GET http://localhost:8000/api/v1/analytics/users/e9854dc3-2f9c-4721-8c13-1ff30a707774/history?skip=0&take=5
+HTTP 200
+\n==> GET http://localhost:8000/api/v1/analytics/users/e9854dc3-2f9c-4721-8c13-1ff30a707774/topics
+HTTP 200
+\n==> GET http://localhost:8000/api/v1/analytics/users/e9854dc3-2f9c-4721-8c13-1ff30a707774/trend
+HTTP 200
+\n--- ADMIN ANALYTICS ---
+\n==> GET http://localhost:8000/api/v1/analytics/system
+HTTP 200
+\n==> GET http://localhost:8000/api/v1/analytics/exams/usage
+HTTP 400
+\n==> GET http://localhost:8000/api/v1/analytics/topics/top-performing
+HTTP 200
+\n--- EXAM ANALYTICS (ADMIN) ---
+\n==> GET http://localhost:8000/api/v1/analytics/exams/8030292d-07da-4212-92eb-f9188a5bb7a6
+HTTP 200
+\n==> GET http://localhost:8000/api/v1/analytics/exams/8030292d-07da-4212-92eb-f9188a5bb7a6/detailed
+HTTP 200
+\n==> GET http://localhost:8000/api/v1/exams/8030292d-07da-4212-92eb-f9188a5bb7a6/attempts?skip=0&take=5
+HTTP 200
+\n--- USERS (ADMIN) ---
+\n==> GET http://localhost:8000/api/v1/users?page=1&limit=5
+HTTP 200
+\nDone.
