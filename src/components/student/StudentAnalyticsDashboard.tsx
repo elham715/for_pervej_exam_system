@@ -226,9 +226,7 @@ export function StudentAnalyticsDashboard() {
                       const scorePercentage = attempt.total_questions > 0 
                         ? ((attempt.score || 0) / attempt.total_questions) * 100 
                         : 0;
-                      const timeTaken = attempt.time_taken_seconds 
-                        ? Math.floor(attempt.time_taken_seconds / 60) 
-                        : 0;
+                      const timeTaken = attempt.time_taken_seconds || 0;
                       
                       return (
                         <tr key={attempt?.id ?? `attempt-${idx}`} className="hover:bg-gray-50">
@@ -247,7 +245,7 @@ export function StudentAnalyticsDashboard() {
                             {attempt.score ?? 0}/{attempt.total_questions ?? 0}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {timeTaken} min
+                            {timeTaken} sec
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleDateString() : 'N/A'}
