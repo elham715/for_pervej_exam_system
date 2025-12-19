@@ -955,7 +955,7 @@ This document provides a comprehensive specification for all API endpoints in th
 
 ### POST /exams/:id/start
 **Access**: All authenticated users
-**Description**: Start a new exam attempt
+**Description**: Start a new exam attempt or resume an existing one
 
 **Response**:
 ```json
@@ -965,21 +965,52 @@ This document provides a comprehensive specification for all API endpoints in th
     "id": "attempt-uuid",
     "exam_id": "exam-uuid",
     "user_id": "user-uuid",
+    "started_at": "2023-10-27T10:00:00.000Z",
+    "expires_at": "2023-10-27T11:00:00.000Z",
+    "submitted_at": null,
     "status": "IN_PROGRESS",
-    "started_at": "2024-01-01T10:00:00.000Z",
-    "expires_at": "2024-01-01T11:00:00.000Z",
-    "score": null,
-    "submitted_at": null
+    "score": 0,
+    "total_questions": 0,
+    "time_taken_seconds": 0,
+    "completed_at": null,
+    "questions": [
+      {
+        "questionSetPosition": 1,
+        "questionPosition": 1,
+        "question": {
+          "id": "question-uuid",
+          "text": "What is the capital of France?",
+          "options": ["London", "Berlin", "Paris", "Madrid"],
+          "marks": 1
+        }
+      },
+      {
+        "questionSetPosition": 1,
+        "questionPosition": 2,
+        "question": {
+          "id": "question-uuid-2",
+          "text": "What is 2 + 2?",
+          "options": ["3", "4", "5", "6"],
+          "marks": 1
+        }
+      }
+    ]
   },
   "message": "Exam attempt started successfully",
-  "timestamp": "2024-01-01T10:00:00.000Z"
+  "timestamp": "2023-10-27T10:00:00.123Z"
 }
 ```
+
+**Key Behaviors**:
+- **New Attempt**: Returns the newly created attempt object + questions
+- **Resuming Active**: Returns the existing IN_PROGRESS attempt object + questions  
+- **Expired**: If the existing attempt is found to be expired, it submits it and returns the result (with status: "SUBMITTED" or "EXPIRED")
+
+**Note**: The `questions` array always includes the complete question data without `correct_answer_index` for security, allowing the frontend to immediately render the exam interface.
 
 **Errors**:
 - `400`: Exam ID is required
 - `404`: Exam not found
-- `409`: User already has an active attempt for this exam
 
 ## Submit Answer
 

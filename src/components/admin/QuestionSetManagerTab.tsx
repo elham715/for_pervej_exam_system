@@ -606,11 +606,27 @@ export const QuestionSetManagerTab = () => {
                             )}
                             {item.question?.options && (
                               <div className="mt-3 grid grid-cols-2 gap-2">
-                                {item.question.options.map((opt: any, optIdx: number) => (
-                                  <div key={optIdx} className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded">
-                                    {opt.option_index}. <TextWithLaTeX text={opt.option_text} />
-                                  </div>
-                                ))}
+                                {item.question.options.map((opt: any, optIdx: number) => {
+                                  const isCorrect = item.question?.correct_answer_index === opt.option_index;
+                                  return (
+                                    <div 
+                                      key={optIdx} 
+                                      className={`text-sm px-3 py-2 rounded border ${
+                                        isCorrect 
+                                          ? 'bg-green-50 border-green-200 text-green-800' 
+                                          : 'bg-gray-50 border-gray-200 text-gray-600'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        {isCorrect && (
+                                          <span className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></span>
+                                        )}
+                                        <span className="font-medium">{opt.option_index}.</span>
+                                        <TextWithLaTeX text={opt.option_text} />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

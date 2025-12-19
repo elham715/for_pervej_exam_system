@@ -6,8 +6,12 @@ import UserMenu from './components/common/UserMenu';
 import UserProfile from './components/admin/UserProfile';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { StudentDashboard } from './components/student/StudentDashboard';
+import { StudentAnalyticsDashboard } from './components/student/StudentAnalyticsDashboard';
 import { HomePage } from './pages/Home';
 import { ExamPage } from './pages/ExamPage';
+import { ExamResultsPage } from './pages/ExamResultsPage';
+import { AnalyticsTestPage } from './pages/AnalyticsTestPage';
+import { UserPerformancePage } from './pages/UserPerformancePage';
 import { GraduationCap, BarChart3 } from 'lucide-react';
 
 function App() {
@@ -34,7 +38,7 @@ function App() {
     return (
       <Routes>
         <Route path="/exam/:examLink" element={<ExamPage />} />
-        <Route path="/exam/:examLink/results/:attemptId" element={<div>Results Page</div>} />
+        <Route path="/exam/:examLink/results/:attemptId" element={<ExamResultsPage />} />
       </Routes>
     );
   }
@@ -79,6 +83,18 @@ function App() {
                 <BarChart3 className="w-4 h-4" />
                 {isAdmin ? 'Dashboard' : 'My Performance'}
               </button>
+              {process.env.NODE_ENV === 'development' && (
+                <button
+                  onClick={() => navigate('/analytics-test')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium ${
+                    location.pathname === '/analytics-test'
+                      ? 'bg-green-100 text-green-700' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Test Analytics
+                </button>
+              )}
               <UserMenu onNavigateToProfile={() => navigate('/profile')} />
             </nav>
           </div>
@@ -90,6 +106,7 @@ function App() {
           {/* Public/Common Routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/profile" element={<UserProfile />} />
+          <Route path="/analytics-test" element={<AnalyticsTestPage />} />
           
           {/* Dashboard Route - Shows different content based on role */}
           <Route 
@@ -98,10 +115,7 @@ function App() {
               isAdmin ? (
                 <AdminDashboard results={[]} questions={[]} />
               ) : (
-                <StudentDashboard 
-                  onStartExam={(examId, examLink) => navigate(`/exam/${examLink}`)}
-                  onViewResults={(attemptId) => navigate(`/results/${attemptId}`)}
-                />
+                <StudentAnalyticsDashboard />
               )
             } 
           />
@@ -128,6 +142,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="ADMIN">
                 <div>Manage Exams Page (Coming Soon)</div>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/user-performance/:userId" 
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <UserPerformancePage />
               </ProtectedRoute>
             } 
           />

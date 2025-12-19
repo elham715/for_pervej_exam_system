@@ -1,5 +1,6 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Question, StudentResult } from '../../types';
 import { Users, FileText, TrendingUp, Calendar as CalendarIcon, BookOpen, HelpCircle, List, FileCheck, UserCog, BarChart3 } from 'lucide-react';
 import { TopicManager } from './TopicManager';
@@ -19,6 +20,27 @@ type DashboardTab = 'analytics' | 'users' | 'topics' | 'questions' | 'question-s
 export function AdminDashboard({ results, questions }: AdminDashboardProps) {
   const [_selectedResult, _setSelectedResult] = useState<StudentResult | null>(null);
   const [activeTab, setActiveTab] = useState<DashboardTab>('analytics');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Handle URL tab parameter
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as DashboardTab;
+    if (tabParam && ['analytics', 'users', 'topics', 'questions', 'question-sets', 'exams'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: DashboardTab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
+
+  // Handle user performance view
+  const handleViewUserPerformance = (userId: string, userName: string) => {
+    navigate(`/admin/user-performance/${userId}?name=${encodeURIComponent(userName)}`);
+  };
 
   const totalStudents = results.length;
   const averageScore = results.length > 0 
@@ -224,7 +246,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
       {/* Tab Navigation */}
       <div className="bg-white rounded-lg shadow-md p-1 inline-flex gap-1 flex-wrap">
         <button
-          onClick={() => setActiveTab('analytics')}
+          onClick={() => handleTabChange('analytics')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'analytics'
               ? 'bg-blue-600 text-white'
@@ -235,7 +257,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
           Analytics
         </button>
         <button
-          onClick={() => setActiveTab('users')}
+          onClick={() => handleTabChange('users')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'users'
               ? 'bg-cyan-600 text-white'
@@ -246,7 +268,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
           Users
         </button>
         <button
-          onClick={() => setActiveTab('topics')}
+          onClick={() => handleTabChange('topics')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'topics'
               ? 'bg-indigo-600 text-white'
@@ -257,7 +279,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
           Topics
         </button>
         <button
-          onClick={() => setActiveTab('questions')}
+          onClick={() => handleTabChange('questions')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'questions'
               ? 'bg-purple-600 text-white'
@@ -268,7 +290,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
           Questions
         </button>
         <button
-          onClick={() => setActiveTab('question-sets')}
+          onClick={() => handleTabChange('question-sets')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'question-sets'
               ? 'bg-green-600 text-white'
@@ -279,7 +301,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
           Question Sets
         </button>
         <button
-          onClick={() => setActiveTab('exams')}
+          onClick={() => handleTabChange('exams')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'exams'
               ? 'bg-orange-600 text-white'
@@ -293,12 +315,10 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
 
       {/* Tab Content */}
       {activeTab === 'analytics' ? (
-        <div className="space-y-5">
-          <AnalyticsDashboard />
-          {overviewContent}
-        </div>
+        <AnalyticsDashboard />
+      
       ) : activeTab === 'users' ? (
-        <UserManager />
+        <UserManager onViewPerformance={handleViewUserPerformance} />
       ) : activeTab === 'topics' ? (
         <TopicManager />
       ) : activeTab === 'questions' ? (

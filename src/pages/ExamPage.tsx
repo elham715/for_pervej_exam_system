@@ -53,10 +53,9 @@ export function ExamPage() {
     setShowForm(false);
   };
 
-  const handleSubmitExam = async (resultData: any) => {
+  const handleSubmitExam = (resultData: { attemptId: string }) => {
     try {
-      // The ExamInterface already handles the attempt start and answer submission
-      // This receives the final result with attemptId from ExamInterface
+      console.log('Exam submitted, navigating to results:', resultData);
       if (resultData.attemptId) {
         // Navigate to results page
         navigate(`/exam/${examLink}/results/${resultData.attemptId}`);

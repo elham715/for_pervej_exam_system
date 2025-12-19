@@ -821,8 +821,10 @@ interface AttemptResponse {
   started_at: string;
   expires_at?: string;
   submitted_at?: string;
+  completed_at?: string;
   score?: number;
   total_questions?: number;
+  time_taken_seconds?: number;
   correct_answers?: number;
   topic_performance?: Array<{
     topic_name: string;
@@ -833,6 +835,21 @@ interface AttemptResponse {
   exam?: any;
   user?: any;
   answers?: any[];
+  questions?: Array<{
+    questionSetPosition: number;
+    questionPosition: number;
+    question: {
+      id: string;
+      text: string;
+      question_latex?: string;
+      image_url?: string;
+      options: string[];
+      marks: number;
+      topic?: {
+        name: string;
+      };
+    };
+  }>;
 }
 
 interface SubmitAnswerRequest {
@@ -924,18 +941,34 @@ export const attemptApi = {
 // ============================================================================
 
 interface UserPerformanceAnalytics {
-  user_id: string;
-  total_attempts: number;
-  completed_attempts: number;
-  average_score: number;
-  best_score: number;
-  total_time_spent_minutes: number;
-  improvement_trend: 'IMPROVING' | 'STABLE' | 'DECLINING';
-  topic_performance: Array<{
-    topic_name: string;
+  userId: string;
+  userName: string;
+  totalExamsTaken: number;
+  completedExams: number;
+  averageScore: number | null;
+  averageTimeSpent: number;
+  completionRate: number;
+  topicWisePerformance: Array<{
+    topicName: string;
     attempts: number;
-    average_score: number;
-    best_score: number;
+    averageScore: number;
+    bestScore: number;
+  }>;
+  recentAttempts: Array<{
+    attemptId: string;
+    examId: string;
+    examTitle: string;
+    score: number;
+    totalQuestions: number;
+    scorePercentage: number;
+    timeTaken: number;
+    completedAt: string | null;
+    status: string;
+  }>;
+  improvementTrend: Array<{
+    period: string;
+    averageScore: number;
+    attemptsCount: number;
   }>;
 }
 
@@ -986,16 +1019,33 @@ interface ExamAnalytics {
 }
 
 interface SystemAnalytics {
-  total_users: number;
-  enrolled_users: number;
-  total_exams: number;
-  total_attempts: number;
-  completed_attempts: number;
-  average_system_score: number;
-  most_popular_topics: Array<{
-    topic_name: string;
-    question_count: number;
-    attempt_count: number;
+  totalUsers: number;
+  activeUsers: number;
+  totalExams: number;
+  totalAttempts: number;
+  completedAttempts: number;
+  systemCompletionRate: number;
+  averageSystemScore: number;
+  topPerformingTopics: Array<{
+    topicId: string;
+    topicName: string;
+    totalQuestions: number;
+    totalAttempts: number;
+    averageAccuracy: number;
+  }>;
+  userEngagement: {
+    dailyActiveUsers: number;
+    weeklyActiveUsers: number;
+    monthlyActiveUsers: number;
+    averageAttemptsPerUser: number;
+  };
+  examUsageStats: Array<{
+    examId: string;
+    examTitle: string;
+    totalAttempts: number;
+    uniqueUsers: number;
+    averageScore: number;
+    popularity: number;
   }>;
 }
 
@@ -1009,11 +1059,11 @@ interface ExamUsageStats {
 }
 
 interface TopPerformingTopic {
-  topic_id: string;
-  topic_name: string;
-  average_score: number;
-  total_attempts: number;
-  question_count: number;
+  topicId: string;
+  topicName: string;
+  totalQuestions: number;
+  totalAttempts: number;
+  averageAccuracy: number;
 }
 
 export const analyticsApi = {

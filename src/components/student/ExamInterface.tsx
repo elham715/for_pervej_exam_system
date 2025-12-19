@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Exam, StudentResult } from '../../types';
+import { Exam } from '../../types';
 import { Timer } from '../Timer';
 import { LaTeX } from '../LaTeX';
 import { attemptApi } from '../../lib/api';
@@ -16,16 +16,56 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [startTime] = useState(Date.now());
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(true);
+  const [examQuestions, setExamQuestions] = useState<any[]>([]);
 
   // Start the exam attempt when component mounts
   useEffect(() => {
     const startExamAttempt = async () => {
       try {
-        const response = await attemptApi.start(exam.id);
-        setAttemptId(response.id);
+        console.log('Starting exam attempt for exam:', exam.id);
+        
+        // Start the attempt - now includes questions in response
+        const attemptResponse = await attemptApi.start(exam.id);
+        console.log('Attempt started with questions:', attemptResponse);
+        setAttemptId(attemptResponse.id);
+        
+        // Extract questions from the new response structure
+        if (attemptResponse.questions && attemptResponse.questions.length > 0) {
+          const questions = attemptResponse.questions.map((q: any) => {
+            // Handle options - could be array of strings or array of objects
+            let options = q.question.options || [];
+            if (options.length > 0 && typeof options[0] === 'object') {
+              // If options are objects, extract the text and sort by option_index
+              options = options
+                .sort((a: any, b: any) => (a.option_index || 0) - (b.option_index || 0))
+                .map((opt: any) => opt.option_text || opt.text || String(opt));
+            }
+            
+            return {
+              id: q.question.id,
+              question_text: q.question.question_text || q.question.text,
+              question_latex: q.question.question_latex,
+              image_url: q.question.image_url,
+              options: options,
+              topic: q.question.topic?.name || 'Unknown',
+              marks: q.question.marks || 1
+            };
+          });
+          
+          console.log('Extracted questions from start response:', questions);
+          console.log('First question options:', questions[0]?.options);
+          setExamQuestions(questions);
+          
+          if (questions.length === 0) {
+            console.warn('No questions found in start response');
+          }
+        } else {
+          console.warn('No questions found in start response');
+        }
+        
         setIsStarting(false);
       } catch (error) {
         console.error('Error starting exam:', error);
@@ -50,19 +90,25 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
     );
   }
 
-  // Type guard for exam.questions
-  if (!exam.questions || exam.questions.length === 0) {
+  // Type guard for questions
+  if (!examQuestions || examQuestions.length === 0) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">No Questions Available</h2>
           <p className="text-gray-600">This exam has no questions. Please contact the administrator.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Refresh Page
+          </button>
         </div>
       </div>
     );
   }
 
-  const currentQuestion = exam.questions[currentQuestionIndex];
+  const currentQuestion = examQuestions[currentQuestionIndex];
 
   const handleAnswer = async (questionId: string, answerIndex: number) => {
     // Update local state
@@ -74,9 +120,12 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
     // Submit answer to backend if attempt has started
     if (attemptId) {
       try {
+        // answerIndex is already 0-based from our option mapping
+        // Backend expects 1-based, so add 1
+        const backendIndex = answerIndex + 1;
         await attemptApi.submitAnswer(attemptId, {
           question_id: questionId,
-          selected_option_index: answerIndex + 1, // Backend expects 1-4, not 0-3
+          selected_option_index: backendIndex,
         });
       } catch (error) {
         console.error('Error submitting answer:', error);
@@ -86,20 +135,23 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
   };
 
   const handleSubmit = async () => {
-    if (isSubmitted || !attemptId) return;
+    if (isSubmitted || isSubmitting || !attemptId) return;
 
-    setIsSubmitted(true);
+    setIsSubmitting(true);
     
     try {
+      console.log('Submitting exam attempt:', attemptId);
       // Submit the exam attempt to finalize it
       await attemptApi.submit(attemptId);
+      
+      setIsSubmitted(true);
       
       // Notify parent component with attemptId for navigation
       onSubmit({ attemptId });
     } catch (error) {
       console.error('Error submitting exam:', error);
       alert('Failed to submit exam. Please try again.');
-      setIsSubmitted(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -110,7 +162,7 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
   };
 
   const nextQuestion = () => {
-    if (exam.questions && currentQuestionIndex < exam.questions.length - 1) {
+    if (currentQuestionIndex < examQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     }
   };
@@ -126,7 +178,7 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
   };
 
   const answeredQuestions = Object.keys(answers).length;
-  const progress = exam.questions ? (answeredQuestions / exam.questions.length) * 100 : 0;
+  const progress = examQuestions.length > 0 ? (answeredQuestions / examQuestions.length) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -143,7 +195,7 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
               </p>
             </div>
             <Timer 
-              duration={exam.time_limit_minutes} 
+              duration={Math.floor(exam.time_limit_seconds / 60)} 
               onTimeUp={handleTimeUp}
               className="flex-shrink-0"
             />
@@ -152,7 +204,7 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
           {/* Progress Bar */}
           <div className="mt-4">
             <div className="flex items-center justify-between text-xs sm:text-sm text-gray-600 mb-2">
-              <span className="font-medium">{answeredQuestions} of {exam.questions?.length || 0} answered</span>
+              <span className="font-medium">{answeredQuestions} of {examQuestions.length} answered</span>
               <span className="font-semibold text-indigo-600">{Math.round(progress)}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5 shadow-inner">
@@ -176,7 +228,7 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
                   {currentQuestionIndex + 1}
                 </span>
                 <span className="text-white/90 text-sm sm:text-base font-medium">
-                  of {exam.questions?.length || 0}
+                  of {examQuestions.length}
                 </span>
               </div>
               <span className="inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-white/20 backdrop-blur-sm text-white rounded-full font-medium">
@@ -211,30 +263,36 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
 
             {/* Answer Options */}
             <div className="space-y-3 sm:space-y-4 mb-6 sm:mb-8">
-              {currentQuestion.options.map((option, index) => (
-                <label
-                  key={index}
-                  className={`group flex items-start sm:items-center p-4 sm:p-5 md:p-6 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                    answers[currentQuestion.id] === index
-                      ? 'border-indigo-500 bg-gradient-to-r from-indigo-50 to-purple-50 shadow-md scale-[1.02]'
-                      : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 hover:shadow-sm'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={`question-${currentQuestion.id}`}
-                    value={index}
-                    checked={answers[currentQuestion.id] === index}
-                    onChange={() => handleAnswer(currentQuestion.id, index)}
-                    className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 mr-3 sm:mr-4 mt-0.5 sm:mt-0 flex-shrink-0"
-                  />
-                  <div className={`text-sm sm:text-base md:text-lg flex-1 ${
-                    answers[currentQuestion.id] === index ? 'text-gray-900 font-medium' : 'text-gray-700'
-                  }`}>
-                    <TextWithLaTeX text={option} />
-                  </div>
-                </label>
-              ))}
+              {currentQuestion.options.map((option: string, index: number) => {
+                // Options are now guaranteed to be strings from our mapping above
+                const optionText = option || '';
+                const optionIndex = index;
+                
+                return (
+                  <label
+                    key={index}
+                    className={`group flex items-start sm:items-center p-4 sm:p-5 md:p-6 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      answers[currentQuestion.id] === optionIndex
+                        ? 'border-indigo-500 bg-gradient-to-r from-indigo-50 to-purple-50 shadow-md scale-[1.02]'
+                        : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 hover:shadow-sm'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name={`question-${currentQuestion.id}`}
+                      value={optionIndex}
+                      checked={answers[currentQuestion.id] === optionIndex}
+                      onChange={() => handleAnswer(currentQuestion.id, optionIndex)}
+                      className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 mr-3 sm:mr-4 mt-0.5 sm:mt-0 flex-shrink-0"
+                    />
+                    <div className={`text-sm sm:text-base md:text-lg flex-1 ${
+                      answers[currentQuestion.id] === optionIndex ? 'text-gray-900 font-medium' : 'text-gray-700'
+                    }`}>
+                      <TextWithLaTeX text={optionText} />
+                    </div>
+                  </label>
+                );
+              })}
             </div>
 
             {/* Navigation Buttons */}
@@ -248,12 +306,13 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
               </button>
               
               <div className="flex gap-3 sm:gap-4">
-                {exam.questions && currentQuestionIndex === exam.questions.length - 1 ? (
+                {currentQuestionIndex === examQuestions.length - 1 ? (
                   <button
                     onClick={handleSubmit}
-                    className="flex-1 sm:flex-none px-8 py-3 sm:py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 font-semibold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                    disabled={isSubmitting}
+                    className="flex-1 sm:flex-none px-8 py-3 sm:py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 font-semibold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    ✓ Submit Exam
+                    {isSubmitting ? 'Submitting...' : '✓ Submit Exam'}
                   </button>
                 ) : (
                   <button
@@ -269,11 +328,11 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
         </div>
 
         {/* Question Grid Navigator (Mobile Hidden, Desktop Only) */}
-        {exam.questions && (
+        {examQuestions.length > 0 && (
           <div className="hidden md:block mt-6 bg-white rounded-xl shadow-lg p-4 border border-gray-100">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Navigation</h3>
             <div className="grid grid-cols-10 lg:grid-cols-15 gap-2">
-              {exam.questions.map((question, index) => (
+              {examQuestions.map((question, index) => (
                 <button
                   key={index}
                   onClick={() => goToQuestion(index)}

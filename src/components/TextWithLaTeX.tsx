@@ -3,10 +3,15 @@ import 'katex/dist/katex.min.css';
 import { InlineMath } from 'react-katex';
 
 interface TextWithLaTeXProps {
-  text: string;
+  text?: string | null;
 }
 
 export function TextWithLaTeX({ text }: TextWithLaTeXProps) {
+  // Handle null, undefined, or non-string values
+  if (!text || typeof text !== 'string' || text.trim() === '') {
+    return <span className="text-gray-400 italic">No text provided</span>;
+  }
+  
   const parts = text.split('$');
 
   return (

@@ -19,7 +19,8 @@ import {
   MapPin,
   Calendar,
   CheckSquare,
-  Square
+  Square,
+  BarChart3
 } from 'lucide-react';
 
 interface User {
@@ -42,7 +43,11 @@ interface Pagination {
   totalPages: number;
 }
 
-export function UserManager() {
+interface UserManagerProps {
+  onViewPerformance?: (userId: string, userName: string) => void;
+}
+
+export function UserManager({ onViewPerformance }: UserManagerProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -527,13 +532,24 @@ export function UserManager() {
                               </button>
                             </>
                           ) : (
-                            <button
-                              onClick={() => handleEdit(user)}
-                              className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
+                            <>
+                              {user.role === 'STUDENT' && onViewPerformance && (
+                                <button
+                                  onClick={() => onViewPerformance(user.id, user.name)}
+                                  className="p-1 text-purple-600 hover:bg-purple-100 rounded"
+                                  title="View Performance"
+                                >
+                                  <BarChart3 className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleEdit(user)}
+                                className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>

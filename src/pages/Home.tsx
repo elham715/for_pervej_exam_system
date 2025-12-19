@@ -42,7 +42,7 @@ export function HomePage() {
           </div>
 
           <div 
-            onClick={() => navigate('/admin/question-sets')}
+            onClick={() => navigate('/admin/dashboard?tab=question-sets')}
             className="bg-white p-8 rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-200"
           >
             <div className="flex flex-col items-center">
@@ -57,7 +57,7 @@ export function HomePage() {
           </div>
 
           <div 
-            onClick={() => navigate('/admin/manage-exams')}
+            onClick={() => navigate('/admin/dashboard?tab=exams')}
             className="bg-white p-8 rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border-2 border-transparent hover:border-green-200"
           >
             <div className="flex flex-col items-center">
