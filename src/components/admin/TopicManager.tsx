@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { topicApi } from '../../lib/api';
-import { Plus, Edit2, Trash2, Video, BookOpen, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Video, BookOpen, AlertCircle, Eye, X } from 'lucide-react';
 
 interface Topic {
   id: string;
@@ -18,6 +18,7 @@ export const TopicManager = () => {
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [previewTopic, setPreviewTopic] = useState<Topic | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -58,10 +59,17 @@ export const TopicManager = () => {
         explanation_video_url: formData.explanation_video_url || undefined,
       });
       
-      // Reset form and reload
+      // Reset form, reload, and show preview
       setFormData({ name: '', explanation_video_url: '' });
       setIsCreating(false);
       await loadTopics();
+      
+      // Show preview of the newly created topic
+      const updatedTopics = await topicApi.getAll({ include_count: true });
+      const newTopic = updatedTopics.find(t => t.name === formData.name);
+      if (newTopic) {
+        setPreviewTopic(newTopic);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to create topic');
       console.error('Error creating topic:', err);
@@ -278,6 +286,13 @@ export const TopicManager = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={() => setPreviewTopic(topic)}
+                          className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Preview topic"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => startEdit(topic)}
                           className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Edit topic"
@@ -320,6 +335,104 @@ export const TopicManager = () => {
           <div className="text-sm text-purple-700">Topics with Videos</div>
         </div>
       </div>
+
+      {/* Preview Modal */}
+      {previewTopic && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Topic Preview</h3>
+              <button
+                onClick={() => setPreviewTopic(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Topic Info */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-blue-600 rounded-lg">
+                    <BookOpen className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-2xl font-bold text-gray-900 mb-2">{previewTopic.name}</h4>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <BookOpen className="w-4 h-4" />
+                        {previewTopic._count?.questions ?? 0} Questions
+                      </span>
+                      <span>Created {new Date(previewTopic.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Video */}
+              {previewTopic.explanation_video_url && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Explanation Video
+                  </label>
+                  <a
+                    href={previewTopic.explanation_video_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <Video className="w-5 h-5" />
+                    <span className="font-medium">Open Video</span>
+                  </a>
+                  <div className="mt-2 text-xs text-gray-500 truncate">
+                    {previewTopic.explanation_video_url}
+                  </div>
+                </div>
+              )}
+
+              {/* Details */}
+              <div className="border-t border-gray-200 pt-4">
+                <h5 className="font-semibold text-gray-900 mb-3">Details</h5>
+                <dl className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <dt className="text-gray-600">Topic ID:</dt>
+                    <dd className="font-mono text-gray-900 text-xs">{previewTopic.id}</dd>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <dt className="text-gray-600">Created:</dt>
+                    <dd className="text-gray-900">{new Date(previewTopic.created_at).toLocaleString()}</dd>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <dt className="text-gray-600">Video Available:</dt>
+                    <dd className="text-gray-900">{previewTopic.explanation_video_url ? 'Yes' : 'No'}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setPreviewTopic(null);
+                    startEdit(previewTopic);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit Topic
+                </button>
+                <button
+                  onClick={() => setPreviewTopic(null)}
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

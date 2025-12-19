@@ -75,6 +75,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setCurrentUser(user);
       
       if (user) {
+        // Log Firebase JWT token in development environment
+        if (import.meta.env.DEV) {
+          try {
+            const token = await user.getIdToken();
+            console.log('🔑 Firebase JWT Token:', token);
+            console.log('👤 User:', user.email);
+          } catch (error) {
+            console.error('Error getting token:', error);
+          }
+        }
+
         const data = await fetchUserDataFromAPI(user);
         setUserData(data);
       } else {

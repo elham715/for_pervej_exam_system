@@ -30,6 +30,10 @@ export function AnalyticsDashboard() {
   const [examUsageStats, setExamUsageStats] = useState<any[]>([]);
   const [topPerformingTopics, setTopPerformingTopics] = useState<any[]>([]);
 
+  const [systemAnalyticsError, setSystemAnalyticsError] = useState<string | null>(null);
+  const [examUsageError, setExamUsageError] = useState<string | null>(null);
+  const [topTopicsError, setTopTopicsError] = useState<string | null>(null);
+
   const isAdmin = userData?.role === 'ADMIN';
 
   useEffect(() => {
@@ -42,32 +46,90 @@ export function AnalyticsDashboard() {
     try {
       setLoading(true);
       setError(null);
+      setSystemAnalyticsError(null);
+      setExamUsageError(null);
+      setTopTopicsError(null);
+
+      const safeArray = (value: any): any[] => (Array.isArray(value) ? value : []);
 
       if (isAdmin) {
-        // Load admin analytics
-        const [system, usage, topTopics] = await Promise.all([
-          analyticsApi.getSystemAnalytics(),
-          analyticsApi.getExamUsageStats(),
-          analyticsApi.getTopPerformingTopics(),
-        ]);
+        // Load admin analytics with individual error handling
+        try {
+          const system = await analyticsApi.getSystemAnalytics();
+          setSystemAnalytics(system);
+        } catch (err: any) {
+          console.error('Error loading system analytics:', err);
+          setSystemAnalyticsError(err?.message || 'Failed to load system analytics');
+          // Set empty data instead of failing completely
+          setSystemAnalytics({
+            total_users: 0,
+            enrolled_users: 0,
+            total_exams: 0,
+            total_attempts: 0,
+            completed_attempts: 0,
+            average_system_score: 0,
+            most_popular_topics: []
+          });
+        }
 
-        setSystemAnalytics(system);
-        setExamUsageStats(usage);
-        setTopPerformingTopics(topTopics);
+        try {
+          const usage = await analyticsApi.getExamUsageStats();
+          setExamUsageStats(safeArray(usage));
+        } catch (err: any) {
+          console.error('Error loading exam usage stats:', err);
+          setExamUsageError(err?.message || 'Failed to load exam usage statistics');
+          setExamUsageStats([]);
+        }
+
+        try {
+          const topTopics = await analyticsApi.getTopPerformingTopics();
+          setTopPerformingTopics(safeArray(topTopics));
+        } catch (err: any) {
+          console.error('Error loading top topics:', err);
+          setTopTopicsError(err?.message || 'Failed to load top performing topics');
+          setTopPerformingTopics([]);
+        }
       }
 
-      // Load user analytics (both admin and students)
-      const [performance, history, topics, trend] = await Promise.all([
-        analyticsApi.getUserPerformance(userData.id),
-        analyticsApi.getUserHistory(userData.id, { take: 10 }),
-        analyticsApi.getUserTopicPerformance(userData.id),
-        analyticsApi.getUserTrend(userData.id),
-      ]);
+      // Load user analytics with individual error handling
+      try {
+        const performance = await analyticsApi.getUserPerformance(userData.id);
+        setUserPerformance(performance);
+      } catch (err: any) {
+        console.error('Error loading user performance:', err);
+        setUserPerformance(null);
+      }
 
-      setUserPerformance(performance);
-      setExamHistory(history);
-      setTopicPerformance(topics);
-      setImprovementTrend(trend);
+      try {
+        const history = await analyticsApi.getUserHistory(userData.id, { take: 10 });
+        setExamHistory(safeArray(history));
+      } catch (err: any) {
+        console.error('Error loading exam history:', err);
+        setExamHistory([]);
+      }
+
+      try {
+        const topics = await analyticsApi.getUserTopicPerformance(userData.id);
+        setTopicPerformance(safeArray(topics));
+      } catch (err: any) {
+        console.error('Error loading topic performance:', err);
+        setTopicPerformance([]);
+      }
+
+      try {
+        const trend = await analyticsApi.getUserTrend(userData.id);
+        if (trend && typeof trend === 'object') {
+          setImprovementTrend({
+            ...trend,
+            score_progression: safeArray((trend as any).score_progression),
+          });
+        } else {
+          setImprovementTrend(null);
+        }
+      } catch (err: any) {
+        console.error('Error loading improvement trend:', err);
+        setImprovementTrend(null);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load analytics');
       console.error('Error loading analytics:', err);
@@ -122,6 +184,14 @@ export function AnalyticsDashboard() {
       {isAdmin && systemAnalytics && (
         <div className="space-y-6">
           <h3 className="text-lg font-semibold text-gray-900">System Overview</h3>
+
+          {systemAnalyticsError && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-yellow-800 text-sm">
+                System analytics unavailable: {systemAnalyticsError}
+              </p>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow-md p-6">
@@ -171,7 +241,7 @@ export function AnalyticsDashboard() {
                 <div>
                   <p className="text-sm text-gray-600">Avg System Score</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {systemAnalytics.average_system_score.toFixed(1)}%
+                    {(systemAnalytics.average_system_score ?? 0).toFixed(1)}%
                   </p>
                 </div>
                 <Award className="w-10 h-10 text-yellow-500" />
@@ -180,9 +250,14 @@ export function AnalyticsDashboard() {
           </div>
 
           {/* Exam Usage Stats */}
-          {examUsageStats.length > 0 && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Exam Usage Statistics</h4>
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h4 className="text-lg font-semibold text-gray-900 mb-4">Exam Usage Statistics</h4>
+            {examUsageError && (
+              <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-yellow-800 text-sm">{examUsageError}</p>
+              </div>
+            )}
+            {examUsageStats.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -207,33 +282,47 @@ export function AnalyticsDashboard() {
                           {exam.unique_users}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {exam.completion_rate.toFixed(1)}%
+                          {(exam.completion_rate ?? 0).toFixed(1)}%
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {exam.average_score.toFixed(1)}%
+                          {(exam.average_score ?? 0).toFixed(1)}%
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p>
+                  {examUsageError
+                    ? 'Exam usage stats could not be loaded.'
+                    : 'No exam attempts yet. Create and share exams to see usage statistics.'}
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Top Performing Topics */}
-          {topPerformingTopics.length > 0 && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Top Performing Topics</h4>
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h4 className="text-lg font-semibold text-gray-900 mb-4">Top Performing Topics</h4>
+            {topTopicsError && (
+              <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-yellow-800 text-sm">{topTopicsError}</p>
+              </div>
+            )}
+            {topPerformingTopics.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {topPerformingTopics.slice(0, 6).map((topic) => (
-                  <div key={topic.topic_id} className="border border-gray-200 rounded-lg p-4">
+                {topPerformingTopics.slice(0, 6).map((topic, idx) => (
+                  <div key={topic?.topic_id ?? topic?.topic_name ?? idx} className="border border-gray-200 rounded-lg p-4">
                     <h5 className="font-medium text-gray-900">{topic.topic_name}</h5>
                     <div className="mt-2 space-y-1">
                       <p className="text-sm text-gray-600">
-                        Avg Score: <span className="font-semibold">{topic.average_score.toFixed(1)}%</span>
+                        Avg Score: <span className="font-semibold">{(topic.average_score ?? 0).toFixed(1)}%</span>
                       </p>
                       <p className="text-sm text-gray-600">
-                        Attempts: <span className="font-semibold">{topic.total_attempts}</span>
+                        Attempts: <span className="font-semibold">{topic.total_attempts ?? 0}</span>
                       </p>
                       <p className="text-sm text-gray-600">
                         Questions: <span className="font-semibold">{topic.question_count}</span>
@@ -242,8 +331,17 @@ export function AnalyticsDashboard() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Target className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p>
+                  {topTopicsError
+                    ? 'Top performing topics could not be loaded.'
+                    : 'No topic performance data yet. Students need to complete exams first.'}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -275,7 +373,7 @@ export function AnalyticsDashboard() {
                 <div>
                   <p className="text-sm text-gray-600">Average Score</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {userPerformance.average_score.toFixed(1)}%
+                    {(userPerformance.average_score ?? 0).toFixed(1)}%
                   </p>
                 </div>
                 <BarChart3 className="w-10 h-10 text-green-500" />
@@ -287,7 +385,7 @@ export function AnalyticsDashboard() {
                 <div>
                   <p className="text-sm text-gray-600">Best Score</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {userPerformance.best_score.toFixed(1)}%
+                    {(userPerformance.best_score ?? 0).toFixed(1)}%
                   </p>
                 </div>
                 <Award className="w-10 h-10 text-yellow-500" />
@@ -317,25 +415,25 @@ export function AnalyticsDashboard() {
                   {getTrendIcon(improvementTrend.trend)}
                   <span className="text-sm font-medium">{improvementTrend.trend}</span>
                   <span className="text-sm">
-                    ({improvementTrend.improvement_rate > 0 ? '+' : ''}{improvementTrend.improvement_rate.toFixed(1)}%)
+                    ({(improvementTrend.improvement_rate ?? 0) > 0 ? '+' : ''}{(improvementTrend.improvement_rate ?? 0).toFixed(1)}%)
                   </span>
                 </div>
               </div>
 
-              {improvementTrend.score_progression.length > 0 && (
+              {Array.isArray(improvementTrend.score_progression) && improvementTrend.score_progression.length > 0 && (
                 <div className="space-y-2">
                   {improvementTrend.score_progression.map((item: any, index: number) => (
-                    <div key={index} className="flex items-center gap-4">
+                    <div key={item?.exam_date ?? index} className="flex items-center gap-4">
                       <span className="text-sm text-gray-600 w-32">
                         {new Date(item.exam_date).toLocaleDateString()}
                       </span>
                       <div className="flex-1 bg-gray-200 rounded-full h-6">
                         <div
                           className="bg-blue-600 h-6 rounded-full flex items-center justify-end px-2"
-                          style={{ width: `${item.score}%` }}
+                          style={{ width: `${item.score ?? 0}%` }}
                         >
                           <span className="text-xs text-white font-medium">
-                            {item.score.toFixed(1)}%
+                            {(item.score ?? 0).toFixed(1)}%
                           </span>
                         </div>
                       </div>
@@ -347,12 +445,12 @@ export function AnalyticsDashboard() {
           )}
 
           {/* Topic Performance */}
-          {topicPerformance.length > 0 && (
+          {Array.isArray(topicPerformance) && topicPerformance.length > 0 && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h4 className="text-lg font-semibold text-gray-900 mb-4">Topic-wise Performance</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {topicPerformance.map((topic) => (
-                  <div key={topic.topic_id} className="border border-gray-200 rounded-lg p-4">
+                {topicPerformance.map((topic, idx) => (
+                  <div key={topic?.topic_id ?? topic?.topic_name ?? idx} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <h5 className="font-medium text-gray-900">{topic.topic_name}</h5>
                       <Target className="w-5 h-5 text-gray-400" />
@@ -361,7 +459,7 @@ export function AnalyticsDashboard() {
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Accuracy</span>
                         <span className="font-semibold text-gray-900">
-                          {topic.accuracy_percentage.toFixed(1)}%
+                          {(topic.accuracy_percentage ?? 0).toFixed(1)}%
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
@@ -384,7 +482,7 @@ export function AnalyticsDashboard() {
           )}
 
           {/* Exam History */}
-          {examHistory.length > 0 && (
+          {Array.isArray(examHistory) && examHistory.length > 0 && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h4 className="text-lg font-semibold text-gray-900 mb-4">Recent Exam History</h4>
               <div className="overflow-x-auto">
@@ -399,13 +497,13 @@ export function AnalyticsDashboard() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {examHistory.map((attempt) => (
-                      <tr key={attempt.attempt_id}>
+                    {examHistory.map((attempt, idx) => (
+                      <tr key={attempt?.attempt_id ?? `${attempt?.exam_title ?? 'attempt'}-${attempt?.submitted_at ?? idx}` }>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {attempt.exam_title}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {attempt.score.toFixed(1)}%
+                          {(attempt.score ?? 0).toFixed(1)}%
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {attempt.time_taken_minutes} min

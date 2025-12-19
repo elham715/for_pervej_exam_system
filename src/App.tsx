@@ -1,17 +1,21 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/auth/Login';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import UserMenu from './components/common/UserMenu';
 import UserProfile from './components/admin/UserProfile';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { StudentDashboard } from './components/student/StudentDashboard';
 import { HomePage } from './pages/Home';
 import { ExamPage } from './pages/ExamPage';
 import { GraduationCap, BarChart3 } from 'lucide-react';
 
 function App() {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, userData, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  const isAdmin = userData?.role === 'ADMIN';
 
   // Show loading spinner while checking auth
   if (loading) {
@@ -73,7 +77,7 @@ function App() {
                 }`}
               >
                 <BarChart3 className="w-4 h-4" />
-                Dashboard
+                {isAdmin ? 'Dashboard' : 'My Performance'}
               </button>
               <UserMenu onNavigateToProfile={() => navigate('/profile')} />
             </nav>
@@ -83,12 +87,52 @@ function App() {
 
       <main className="max-w-7xl mx-auto py-8 px-4">
         <Routes>
+          {/* Public/Common Routes */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard results={[]} questions={[]} />} />
-          <Route path="/admin/question-sets" element={<div>Question Sets Page (Coming Soon)</div>} />
-          <Route path="/admin/create-exam" element={<div>Create Exam Page (Coming Soon)</div>} />
-          <Route path="/admin/manage-exams" element={<div>Manage Exams Page (Coming Soon)</div>} />
           <Route path="/profile" element={<UserProfile />} />
+          
+          {/* Dashboard Route - Shows different content based on role */}
+          <Route 
+            path="/admin/dashboard" 
+            element={
+              isAdmin ? (
+                <AdminDashboard results={[]} questions={[]} />
+              ) : (
+                <StudentDashboard 
+                  onStartExam={(examId, examLink) => navigate(`/exam/${examLink}`)}
+                  onViewResults={(attemptId) => navigate(`/results/${attemptId}`)}
+                />
+              )
+            } 
+          />
+          
+          {/* Admin-Only Routes */}
+          <Route 
+            path="/admin/question-sets" 
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <div>Question Sets Page (Coming Soon)</div>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/create-exam" 
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <div>Create Exam Page (Coming Soon)</div>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/manage-exams" 
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <div>Manage Exams Page (Coming Soon)</div>
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

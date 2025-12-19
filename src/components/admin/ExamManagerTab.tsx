@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { examApi, questionSetApi } from '../../lib/api';
-import { Plus, Edit2, Trash2, Calendar, AlertCircle, Clock, Link2, ChevronRight, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, Calendar, AlertCircle, Clock, Link2, ChevronRight, Users, Eye, X, FileText, List } from 'lucide-react';
+import { LaTeX } from '../LaTeX';
+import { TextWithLaTeX } from '../TextWithLaTeX';
 
 interface Exam {
   id: string;
@@ -31,6 +33,7 @@ export const ExamManagerTab = () => {
   const [selectedSets, setSelectedSets] = useState<Array<{ question_set_id: string; position: number }>>([]);
   const [viewAttemptsId, setViewAttemptsId] = useState<string | null>(null);
   const [attempts, setAttempts] = useState<any[]>([]);
+  const [previewExam, setPreviewExam] = useState<Exam | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -89,6 +92,14 @@ export const ExamManagerTab = () => {
       resetForm();
       setIsCreating(false);
       await loadData();
+      
+      // Show preview of the newly created exam
+      const updatedExams = await examApi.getAll();
+      const newExam = updatedExams.find(e => e.exam_link === formData.exam_link);
+      if (newExam) {
+        const detailedExam = await examApi.getById(newExam.id);
+        setPreviewExam(detailedExam);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to create exam');
       console.error('Error creating exam:', err);
@@ -662,6 +673,16 @@ export const ExamManagerTab = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={async () => {
+                            const detailedExam = await examApi.getById(exam.id);
+                            setPreviewExam(detailedExam);
+                          }}
+                          className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Preview exam"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => startViewAttempts(exam)}
                           className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                           title="View attempts"
@@ -710,6 +731,298 @@ export const ExamManagerTab = () => {
           <div className="text-sm text-green-700">Available Question Sets</div>
         </div>
       </div>
+
+      {/* Preview Modal */}
+      {previewExam && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Exam Preview</h3>
+              <button
+                onClick={() => setPreviewExam(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Exam Info */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-blue-600 rounded-lg">
+                    <FileText className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-2xl font-bold text-gray-900 mb-2">{previewExam.title}</h4>
+                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {formatTime(previewExam.time_limit_seconds)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <List className="w-4 h-4" />
+                        {previewExam.exam_question_sets?.length || 0} Question Sets
+                      </span>
+                      <span>Created {new Date(previewExam.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Link2 className="w-4 h-4 text-blue-600" />
+                        <span className="text-gray-600">Exam Link:</span>
+                        <code className="bg-gray-100 px-2 py-1 rounded text-blue-700 font-mono">
+                          {window.location.origin}/exam/{previewExam.exam_link}
+                        </code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/exam/${previewExam.exam_link}`);
+                            alert('Link copied to clipboard!');
+                          }}
+                          className="ml-auto px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors text-xs font-medium"
+                        >
+                          Copy Link
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Question Sets */}
+              {previewExam.exam_question_sets && previewExam.exam_question_sets.length > 0 ? (
+                <div>
+                  <h5 className="font-semibold text-gray-900 mb-4">Question Sets and Questions</h5>
+                  <div className="space-y-6">
+                    {previewExam.exam_question_sets.map((item, index) => (
+                      <div key={index} className="border border-gray-300 rounded-lg overflow-hidden">
+                        {/* Question Set Header */}
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-300 p-4">
+                          <div className="flex items-start gap-3">
+                            <span className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                              {item.position}
+                            </span>
+                            <div className="flex-1">
+                              <h6 className="font-bold text-gray-900 mb-1">{item.question_set?.title}</h6>
+                              {item.question_set?.description && (
+                                <p className="text-sm text-gray-600">{item.question_set.description}</p>
+                              )}
+                              <p className="text-xs text-gray-500 mt-2">
+                                {item.question_set?.question_set_questions?.length || 0} Questions
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Questions */}
+                        {item.question_set?.question_set_questions && item.question_set.question_set_questions.length > 0 ? (
+                          <div className="p-4 space-y-4 bg-white">
+                            {item.question_set.question_set_questions.map((q: any, qIdx: number) => (
+                              <div key={qIdx} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
+                                {/* Question Header */}
+                                <div className="flex items-start gap-3 mb-3">
+                                  <span className="flex-shrink-0 w-7 h-7 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center font-semibold text-sm">
+                                    {qIdx + 1}
+                                  </span>
+                                  <div className="flex-1">
+                                    {q.question?.topic && (
+                                      <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium mb-2">
+                                        {q.question.topic.name}
+                                      </span>
+                                    )}
+                                    {q.question?.question_text && (
+                                      <div className="text-gray-900 font-medium mb-2">
+                                        <TextWithLaTeX text={q.question.question_text} />
+                                      </div>
+                                    )}
+                                    {q.question?.question_latex && (
+                                      <div className="bg-gray-50 p-3 rounded border border-gray-200 mb-2">
+                                        <LaTeX latex={q.question.question_latex} />
+                                      </div>
+                                    )}
+                                    {q.question?.question_image_url && (
+                                      <img 
+                                        src={q.question.question_image_url} 
+                                        alt="Question" 
+                                        className="max-w-full h-auto rounded border border-gray-200 mb-2"
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Options */}
+                                {q.question?.options && q.question.options.length > 0 && (
+                                  <div className="ml-10 space-y-2">
+                                    {q.question.options
+                                      .sort((a: any, b: any) => a.option_index - b.option_index)
+                                      .map((option: any) => {
+                                        const isCorrect = option.option_index === q.question.correct_answer_index;
+                                        return (
+                                          <div
+                                            key={option.id}
+                                            className={`p-3 rounded-lg border-2 ${
+                                              isCorrect
+                                                ? 'bg-green-50 border-green-500'
+                                                : 'bg-gray-50 border-gray-200'
+                                            }`}
+                                          >
+                                            <div className="flex items-start gap-2">
+                                              <span className={`font-semibold ${
+                                                isCorrect ? 'text-green-700' : 'text-gray-700'
+                                              }`}>
+                                                {String.fromCharCode(64 + option.option_index)}.
+                                              </span>
+                                              <div className="flex-1">
+                                                {option.option_text && (
+                                                  <TextWithLaTeX text={option.option_text} />
+                                                )}
+                                                {option.option_latex && (
+                                                  <div className="mt-1">
+                                                    <LaTeX latex={option.option_latex} />
+                                                  </div>
+                                                )}
+                                                {option.option_image_url && (
+                                                  <img 
+                                                    src={option.option_image_url} 
+                                                    alt={`Option ${option.option_index}`}
+                                                    className="mt-2 max-w-xs h-auto rounded"
+                                                  />
+                                                )}
+                                                {isCorrect && (
+                                                  <span className="inline-block mt-1 px-2 py-0.5 bg-green-600 text-white text-xs rounded font-medium">
+                                                    Correct Answer
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                  </div>
+                                )}
+
+                                {/* Explanation */}
+                                {q.question?.explanation && (
+                                  <div className="ml-10 mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <p className="text-xs font-semibold text-blue-900 mb-1">Explanation:</p>
+                                    <div className="text-sm text-gray-700">
+                                      <TextWithLaTeX text={q.question.explanation} />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Video Solution */}
+                                {q.question?.video_solution_url && (
+                                  <div className="ml-10 mt-2">
+                                    <a
+                                      href={q.question.video_solution_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                                    >
+                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" />
+                                      </svg>
+                                      Video Solution
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="p-6 text-center text-gray-500">
+                            <p className="text-sm">No questions in this set</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <List className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                  <p>No question sets in this exam yet</p>
+                </div>
+              )}
+
+              {/* Summary */}
+              <div className="border-t border-gray-200 pt-4">
+                <h5 className="font-semibold text-gray-900 mb-3">Exam Summary</h5>
+                <dl className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <dt className="text-gray-600 mb-1">Exam ID:</dt>
+                    <dd className="font-mono text-xs text-gray-900 bg-gray-100 px-2 py-1 rounded">{previewExam.id}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-600 mb-1">Time Limit:</dt>
+                    <dd className="text-gray-900">{formatTime(previewExam.time_limit_seconds)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-600 mb-1">Exam Link:</dt>
+                    <dd className="text-gray-900 font-mono text-xs">{previewExam.exam_link}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-600 mb-1">Created:</dt>
+                    <dd className="text-gray-900">{new Date(previewExam.created_at).toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-600 mb-1">Total Question Sets:</dt>
+                    <dd className="text-gray-900">{previewExam.exam_question_sets?.length || 0}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-600 mb-1">Total Questions:</dt>
+                    <dd className="text-gray-900">
+                      {previewExam.exam_question_sets?.reduce((sum, set) => 
+                        sum + (set.question_set?.question_set_questions?.length || 0), 0
+                      ) || 0}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setPreviewExam(null);
+                    startManageSets(previewExam);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  Manage Question Sets
+                </button>
+                <button
+                  onClick={() => {
+                    setPreviewExam(null);
+                    startEdit(previewExam);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit Exam
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/exam/${previewExam.exam_link}`);
+                    alert('Exam link copied to clipboard!');
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  <Link2 className="w-4 h-4" />
+                  Copy Link
+                </button>
+                <button
+                  onClick={() => setPreviewExam(null)}
+                  className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

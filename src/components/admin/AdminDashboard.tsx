@@ -14,7 +14,7 @@ interface AdminDashboardProps {
   questions: Question[];
 }
 
-type DashboardTab = 'overview' | 'analytics' | 'users' | 'topics' | 'questions' | 'question-sets' | 'exams';
+type DashboardTab = 'analytics' | 'users' | 'topics' | 'questions' | 'question-sets' | 'exams';
 
 export function AdminDashboard({ results, questions }: AdminDashboardProps) {
   const [_selectedResult, _setSelectedResult] = useState<StudentResult | null>(null);
@@ -49,106 +49,10 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
     });
   }, [results, questions]);
 
-  return (
-    <div className="space-y-5">
-      {/* Tab Navigation */}
-      <div className="bg-white rounded-lg shadow-md p-1 inline-flex gap-1 flex-wrap">
-        <button
-          onClick={() => setActiveTab('analytics')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'analytics'
-              ? 'bg-blue-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          Analytics
-        </button>
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'overview'
-              ? 'bg-indigo-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          Overview
-        </button>
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'users'
-              ? 'bg-cyan-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          <UserCog className="w-4 h-4" />
-          Users
-        </button>
-        <button
-          onClick={() => setActiveTab('topics')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'topics'
-              ? 'bg-indigo-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          Topics
-        </button>
-        <button
-          onClick={() => setActiveTab('questions')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'questions'
-              ? 'bg-purple-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          <HelpCircle className="w-4 h-4" />
-          Questions
-        </button>
-        <button
-          onClick={() => setActiveTab('question-sets')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'question-sets'
-              ? 'bg-green-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          <List className="w-4 h-4" />
-          Question Sets
-        </button>
-        <button
-          onClick={() => setActiveTab('exams')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'exams'
-              ? 'bg-orange-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
-        >
-          <FileCheck className="w-4 h-4" />
-          Exams
-        </button>
-      </div>
-
-      {/* Tab Content */}
-      {activeTab === 'analytics' ? (
-        <AnalyticsDashboard />
-      ) : activeTab === 'users' ? (
-        <UserManager />
-      ) : activeTab === 'topics' ? (
-        <TopicManager />
-      ) : activeTab === 'questions' ? (
-        <QuestionManager />
-      ) : activeTab === 'question-sets' ? (
-        <QuestionSetManagerTab />
-      ) : activeTab === 'exams' ? (
-        <ExamManagerTab />
-      ) : (
-        <>
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+  const overviewContent = (
+    <>
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg shadow-md">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -214,7 +118,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
                 <div className="w-28 bg-gray-200 rounded-full h-2.5">
                   <div
                     className={`h-2.5 rounded-full ${
-                      topic.performance >= 80 ? 'bg-green-500' : 
+                      topic.performance >= 80 ? 'bg-green-500' :
                       topic.performance >= 60 ? 'bg-yellow-500' : 'bg-red-500'
                     }`}
                     style={{ width: `${Math.min(topic.performance, 100)}%` }}
@@ -264,14 +168,10 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
                 return (
                   <tr key={result.id} className="hover:bg-gray-50">
                     <td className="px-5 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {result.student_name}
-                      </div>
+                      <div className="text-sm font-medium text-gray-900">{result.student_name}</div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-600">
-                        {result.student_email}
-                      </div>
+                      <div className="text-sm text-gray-600">{result.student_email}</div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
@@ -279,20 +179,23 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
                       </div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        percentage >= 80 ? 'bg-green-100 text-green-800' :
-                        percentage >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
+                      <span
+                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          percentage >= 80
+                            ? 'bg-green-100 text-green-800'
+                            : percentage >= 60
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-red-100 text-red-800'
+                        }`}
+                      >
                         {percentage}%
                       </span>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-600">
-                        {result.incorrect_topics.length > 0 
+                        {result.incorrect_topics.length > 0
                           ? result.incorrect_topics.join(', ')
-                          : 'None - Perfect Score!'
-                        }
+                          : 'None - Perfect Score!'}
                       </div>
                     </td>
                     <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -303,15 +206,109 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
               })}
             </tbody>
           </table>
-          
+
           {results.length === 0 && (
             <div className="text-center py-10">
-              <p className="text-gray-500 text-sm">No exam results yet. Share your exam links with students to get started!</p>
+              <p className="text-gray-500 text-sm">
+                No exam results yet. Share your exam links with students to get started!
+              </p>
             </div>
           )}
         </div>
       </div>
-        </>
+    </>
+  );
+
+  return (
+    <div className="space-y-5">
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-lg shadow-md p-1 inline-flex gap-1 flex-wrap">
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'analytics'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Analytics
+        </button>
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'users'
+              ? 'bg-cyan-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <UserCog className="w-4 h-4" />
+          Users
+        </button>
+        <button
+          onClick={() => setActiveTab('topics')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'topics'
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          Topics
+        </button>
+        <button
+          onClick={() => setActiveTab('questions')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'questions'
+              ? 'bg-purple-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <HelpCircle className="w-4 h-4" />
+          Questions
+        </button>
+        <button
+          onClick={() => setActiveTab('question-sets')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'question-sets'
+              ? 'bg-green-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <List className="w-4 h-4" />
+          Question Sets
+        </button>
+        <button
+          onClick={() => setActiveTab('exams')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'exams'
+              ? 'bg-orange-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <FileCheck className="w-4 h-4" />
+          Exams
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'analytics' ? (
+        <div className="space-y-5">
+          <AnalyticsDashboard />
+          {overviewContent}
+        </div>
+      ) : activeTab === 'users' ? (
+        <UserManager />
+      ) : activeTab === 'topics' ? (
+        <TopicManager />
+      ) : activeTab === 'questions' ? (
+        <QuestionManager />
+      ) : activeTab === 'question-sets' ? (
+        <QuestionSetManagerTab />
+      ) : activeTab === 'exams' ? (
+        <ExamManagerTab />
+      ) : (
+        <AnalyticsDashboard />
       )}
     </div>
   );

@@ -112,6 +112,38 @@ export function ExamPage() {
     );
   }
 
+  // Check if student is enrolled (only for students, admins can access all exams)
+  if (userData?.role === 'STUDENT' && userData?.is_enrolled === false) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
+          <AlertCircle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Enrollment Required</h2>
+          <p className="text-gray-600 mb-6">
+            You must be enrolled to take this exam. Please contact your administrator to get enrolled.
+          </p>
+          {exam && (
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg text-left">
+              <p className="text-sm text-gray-700 mb-1">
+                <strong>Exam:</strong> {exam.title}
+              </p>
+              <p className="text-sm text-gray-600">
+                <Clock className="inline w-4 h-4 mr-1" />
+                {Math.floor(exam.time_limit_seconds / 60)} minutes
+              </p>
+            </div>
+          )}
+          <button
+            onClick={() => navigate('/')}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (error || !exam) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
