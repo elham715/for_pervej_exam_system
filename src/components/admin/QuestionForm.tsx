@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import { Question, Topic } from '../../types';
 import { LaTeX } from '../LaTeX';
-
 import { TextWithLaTeX } from '../TextWithLaTeX';
+import { topicApi } from '../../lib/api';
 
 interface QuestionFormProps {
   onSubmit: (question: Omit<Question, 'id' | 'created_at'>) => void;
@@ -11,7 +11,10 @@ interface QuestionFormProps {
   onCreateNewTopic: (topicName: string, explanationVideoUrl?: string) => Promise<void>;
 }
 
-export function QuestionForm({ onSubmit, topics, onCreateNewTopic }: QuestionFormProps) {
+export function QuestionForm({ onSubmit, topics: propTopics, onCreateNewTopic }: QuestionFormProps) {
+  const [topics, setTopics] = useState<Topic[]>(propTopics);
+  const [loadingTopics, setLoadingTopics] = useState(false);
+  
   const [formData, setFormData] = useState({
     topic: '',
     question_text: '',
@@ -28,6 +31,41 @@ export function QuestionForm({ onSubmit, topics, onCreateNewTopic }: QuestionFor
   const [showOptionPreview, setShowOptionPreview] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
   const [newTopicVideoUrl, setNewTopicVideoUrl] = useState('');
+
+  // Fetch topics from API on mount
+  useEffect(() => {
+    loadTopicsFromApi();
+  }, []);
+
+  // Also update from props if they change
+  useEffect(() => {
+    if (propTopics && propTopics.length > 0) {
+      setTopics(propTopics);
+    }
+  }, [propTopics]);
+
+  const loadTopicsFromApi = async () => {
+    try {
+      setLoadingTopics(true);
+      const apiTopics = await topicApi.getAll();
+      // Convert API response to Topic format
+      const convertedTopics: Topic[] = apiTopics.map(t => ({
+        id: t.id,
+        name: t.name,
+        explanation_video_url: t.explanation_video_url,
+        created_at: t.created_at,
+      }));
+      setTopics(convertedTopics);
+    } catch (error) {
+      console.error('Error loading topics from API:', error);
+      // Fallback to prop topics if API fails
+      if (propTopics) {
+        setTopics(propTopics);
+      }
+    } finally {
+      setLoadingTopics(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

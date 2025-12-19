@@ -5,6 +5,7 @@ import { QuestionEditForm } from './QuestionEditForm';
 import { Plus, Trash2, BookOpen, CreditCard as Edit3, ChevronDown, ChevronRight, Edit } from 'lucide-react';
 import { LaTeX } from '../LaTeX';
 import { createQuestionSet, createQuestion, addQuestionToSet, deleteQuestionSet, createTopic, updateQuestion } from '../../lib/localStorage';
+import { topicApi } from '../../lib/api';
 
 interface QuestionSetManagerProps {
   questionSets: QuestionSet[];
@@ -107,11 +108,23 @@ export function QuestionSetManager({
   const handleCreateNewTopic = async (topicName: string, explanationVideoUrl?: string) => {
     console.log('Attempting to create new topic from UI:', { topicName, explanationVideoUrl });
     try {
-      await createTopic(topicName, explanationVideoUrl);
+      // Try to create via API first
+      await topicApi.create({
+        name: topicName,
+        explanation_video_url: explanationVideoUrl,
+      });
+      console.log('✅ Topic created via API');
       reloadData();
-    } catch (error) {
-      console.error('Error creating new topic:', error);
-      alert('Failed to create new topic. See console for details.');
+    } catch (apiError) {
+      console.error('❌ Error creating topic via API, trying localStorage...', apiError);
+      // Fallback to localStorage
+      try {
+        await createTopic(topicName, explanationVideoUrl);
+        reloadData();
+      } catch (error) {
+        console.error('Error creating new topic:', error);
+        alert('Failed to create new topic. See console for details.');
+      }
     }
   };
 

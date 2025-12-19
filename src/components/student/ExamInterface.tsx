@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Exam, StudentResult } from '../../types';
 import { Timer } from '../Timer';
 import { LaTeX } from '../LaTeX';
-
+import { attemptApi } from '../../lib/api';
 import { TextWithLaTeX } from '../TextWithLaTeX';
 
 interface ExamInterfaceProps {
   exam: Exam;
   studentName: string;
   studentEmail: string;
-  onSubmit: (result: Omit<StudentResult, 'id' | 'completed_at'>) => void;
+  onSubmit: (result: { attemptId: string }) => void;
 }
 
 export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: ExamInterfaceProps) {
@@ -17,6 +17,38 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [startTime] = useState(Date.now());
+  const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(true);
+
+  // Start the exam attempt when component mounts
+  useEffect(() => {
+    const startExamAttempt = async () => {
+      try {
+        const response = await attemptApi.start(exam.id);
+        setAttemptId(response.id);
+        setIsStarting(false);
+      } catch (error) {
+        console.error('Error starting exam:', error);
+        alert('Failed to start exam. Please refresh and try again.');
+        setIsStarting(false);
+      }
+    };
+
+    startExamAttempt();
+  }, [exam.id]);
+
+  // Show loading while starting the exam
+  if (isStarting) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Starting Your Exam...</h2>
+          <p className="text-gray-600">Please wait while we prepare your exam.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Type guard for exam.questions
   if (!exam.questions || exam.questions.length === 0) {
@@ -32,51 +64,43 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
 
   const currentQuestion = exam.questions[currentQuestionIndex];
 
-  const handleAnswer = (questionId: string, answerIndex: number) => {
+  const handleAnswer = async (questionId: string, answerIndex: number) => {
+    // Update local state
     setAnswers(prev => ({
       ...prev,
       [questionId]: answerIndex
     }));
-  };
 
-  const calculateResults = () => {
-    let score = 0;
-    const incorrectTopics = new Set<string>();
-
-    if (exam.questions) {
-      exam.questions.forEach(question => {
-        const userAnswer = answers[question.id];
-        if (userAnswer === question.correct_answer) {
-          score++;
-        } else {
-          incorrectTopics.add(question.topic);
-        }
-      });
+    // Submit answer to backend if attempt has started
+    if (attemptId) {
+      try {
+        await attemptApi.submitAnswer(attemptId, {
+          question_id: questionId,
+          selected_option_index: answerIndex + 1, // Backend expects 1-4, not 0-3
+        });
+      } catch (error) {
+        console.error('Error submitting answer:', error);
+        // Don't alert on every answer error, just log it
+      }
     }
-
-    return {
-      score,
-      incorrect_topics: Array.from(incorrectTopics)
-    };
   };
 
-  const handleSubmit = () => {
-    if (isSubmitted) return;
+  const handleSubmit = async () => {
+    if (isSubmitted || !attemptId) return;
 
-    const { score, incorrect_topics } = calculateResults();
-    const timeTakenSeconds = Math.floor((Date.now() - startTime) / 1000);
-    
     setIsSubmitted(true);
-    onSubmit({
-      exam_id: exam.id,
-      student_name: studentName,
-      student_email: studentEmail,
-      answers,
-      score,
-      total_questions: exam.questions?.length || 0,
-      incorrect_topics,
-      time_taken_seconds: timeTakenSeconds
-    });
+    
+    try {
+      // Submit the exam attempt to finalize it
+      await attemptApi.submit(attemptId);
+      
+      // Notify parent component with attemptId for navigation
+      onSubmit({ attemptId });
+    } catch (error) {
+      console.error('Error submitting exam:', error);
+      alert('Failed to submit exam. Please try again.');
+      setIsSubmitted(false);
+    }
   };
 
   const handleTimeUp = () => {

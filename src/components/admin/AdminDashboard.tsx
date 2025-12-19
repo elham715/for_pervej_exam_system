@@ -1,15 +1,24 @@
 
 import { useState, useMemo } from 'react';
 import { Question, StudentResult } from '../../types';
-import { Users, FileText, TrendingUp, Calendar } from 'lucide-react';
+import { Users, FileText, TrendingUp, Calendar as CalendarIcon, BookOpen, HelpCircle, List, FileCheck, UserCog, BarChart3 } from 'lucide-react';
+import { TopicManager } from './TopicManager';
+import { QuestionManager } from './QuestionManager';
+import { QuestionSetManagerTab } from './QuestionSetManagerTab';
+import { ExamManagerTab } from './ExamManagerTab';
+import { UserManager } from './UserManager';
+import { AnalyticsDashboard } from './AnalyticsDashboard';
 
 interface AdminDashboardProps {
   results: StudentResult[];
   questions: Question[];
 }
 
+type DashboardTab = 'overview' | 'analytics' | 'users' | 'topics' | 'questions' | 'question-sets' | 'exams';
+
 export function AdminDashboard({ results, questions }: AdminDashboardProps) {
   const [_selectedResult, _setSelectedResult] = useState<StudentResult | null>(null);
+  const [activeTab, setActiveTab] = useState<DashboardTab>('analytics');
 
   const totalStudents = results.length;
   const averageScore = results.length > 0 
@@ -42,8 +51,104 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
 
   return (
     <div className="space-y-5">
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-lg shadow-md p-1 inline-flex gap-1 flex-wrap">
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'analytics'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Analytics
+        </button>
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'overview'
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          Overview
+        </button>
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'users'
+              ? 'bg-cyan-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <UserCog className="w-4 h-4" />
+          Users
+        </button>
+        <button
+          onClick={() => setActiveTab('topics')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'topics'
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          Topics
+        </button>
+        <button
+          onClick={() => setActiveTab('questions')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'questions'
+              ? 'bg-purple-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <HelpCircle className="w-4 h-4" />
+          Questions
+        </button>
+        <button
+          onClick={() => setActiveTab('question-sets')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'question-sets'
+              ? 'bg-green-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <List className="w-4 h-4" />
+          Question Sets
+        </button>
+        <button
+          onClick={() => setActiveTab('exams')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'exams'
+              ? 'bg-orange-600 text-white'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <FileCheck className="w-4 h-4" />
+          Exams
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'analytics' ? (
+        <AnalyticsDashboard />
+      ) : activeTab === 'users' ? (
+        <UserManager />
+      ) : activeTab === 'topics' ? (
+        <TopicManager />
+      ) : activeTab === 'questions' ? (
+        <QuestionManager />
+      ) : activeTab === 'question-sets' ? (
+        <QuestionSetManagerTab />
+      ) : activeTab === 'exams' ? (
+        <ExamManagerTab />
+      ) : (
+        <>
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg shadow-md">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -83,7 +188,7 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
         <div className="bg-white p-4 rounded-lg shadow-md">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-100 rounded-lg">
-              <Calendar className="w-5 h-5 text-purple-600" />
+              <CalendarIcon className="w-5 h-5 text-purple-600" />
             </div>
             <div>
               <p className="text-xs text-gray-600">Topics</p>
@@ -206,6 +311,8 @@ export function AdminDashboard({ results, questions }: AdminDashboardProps) {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }
