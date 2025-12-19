@@ -1586,6 +1586,217 @@ This document provides a comprehensive specification for all API endpoints in th
 }
 ```
 
+## Get Detailed User Attempts (Enhanced)
+
+### GET /analytics/users/:userId/attempts/detailed
+**Access**: Admin or Self (requesting user ID matches userId)
+**Description**: Get comprehensive attempt details with questions and answers. Response varies based on attempt status and user role.
+
+**Query Parameters**:
+- `skip` (optional): Number of items to skip (default: 0)
+- `take` (optional): Number of items to return (default: 100, max: 100)
+
+**Response Scenarios**:
+
+#### Scenario 1: SUBMITTED or EXPIRED Attempts (Full Review Mode)
+*Includes explanations, video solutions, and correct answer indicators for learning*
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "attempt-uuid-done",
+      "exam_id": "exam-uuid",
+      "user_id": "user-uuid",
+      "status": "SUBMITTED",
+      "score": 80.0,
+      "total_questions": 10,
+      "time_taken_seconds": 1200,
+      "started_at": "2023-10-27T10:00:00Z",
+      "submitted_at": "2023-10-27T10:20:00Z",
+      "exam": {
+        "id": "exam-uuid",
+        "title": "Final Chemistry Exam",
+        "time_limit_seconds": 3600
+      },
+      "user": {
+        "id": "user-uuid",
+        "name": "John Doe",
+        "email": "john@example.com"
+      },
+      "exam_answers": [
+        {
+          "id": "answer-uuid-1",
+          "question_id": "q1",
+          "selected_option_index": 2,
+          "is_correct": true,
+          "answered_at": "2023-10-27T10:05:00Z",
+          "question": {
+            "id": "q1",
+            "question_text": "What is the capital of France?",
+            "correct_answer_index": 2,
+            "explanation_latex": "Paris is the capital and largest city of France...",
+            "video_solution_url": "https://youtube.com/watch?v=example",
+            "image_url": "https://img.com/question-image.jpg",
+            "options": [
+              {
+                "id": "opt1",
+                "option_index": 1,
+                "option_text": "London"
+              },
+              {
+                "id": "opt2",
+                "option_index": 2,
+                "option_text": "Paris"
+              },
+              {
+                "id": "opt3",
+                "option_index": 3,
+                "option_text": "Berlin"
+              },
+              {
+                "id": "opt4",
+                "option_index": 4,
+                "option_text": "Madrid"
+              }
+            ],
+            "topic": {
+              "id": "topic-1",
+              "name": "Geography",
+              "explanation_video_url": "https://youtube.com/watch?v=geography-basics"
+            }
+          }
+        },
+        {
+          "id": "answer-uuid-2",
+          "question_id": "q2",
+          "selected_option_index": 1,
+          "is_correct": false,
+          "answered_at": "2023-10-27T10:08:00Z",
+          "question": {
+            "id": "q2",
+            "question_text": "Atomic number of Carbon?",
+            "correct_answer_index": 3,
+            "explanation_latex": "Carbon has 6 protons, so its atomic number is 6...",
+            "video_solution_url": "https://youtube.com/watch?v=carbon-example",
+            "options": [
+              {
+                "id": "opt5",
+                "option_index": 1,
+                "option_text": "4"
+              },
+              {
+                "id": "opt6",
+                "option_index": 2,
+                "option_text": "8"
+              },
+              {
+                "id": "opt7",
+                "option_index": 3,
+                "option_text": "6"
+              },
+              {
+                "id": "opt8",
+                "option_index": 4,
+                "option_text": "12"
+              }
+            ],
+            "topic": {
+              "id": "topic-2",
+              "name": "Chemistry",
+              "explanation_video_url": "https://youtube.com/watch?v=chemistry-fundamentals"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "timestamp": "2023-10-27T10:00:00Z"
+}
+```
+
+#### Scenario 2: IN_PROGRESS Attempts (Exam Mode)
+*Sensitive learning data is hidden to prevent cheating*
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "attempt-uuid-active",
+      "exam_id": "exam-uuid",
+      "user_id": "user-uuid",
+      "status": "IN_PROGRESS",
+      "score": 0,
+      "total_questions": 10,
+      "time_taken_seconds": 600,
+      "started_at": "2023-10-27T11:00:00Z",
+      "submitted_at": null,
+      "exam": {
+        "id": "exam-uuid",
+        "title": "Final Chemistry Exam",
+        "time_limit_seconds": 3600
+      },
+      "user": {
+        "id": "user-uuid",
+        "name": "John Doe",
+        "email": "john@example.com"
+      },
+      "exam_answers": [
+        {
+          "id": "answer-uuid-3",
+          "question_id": "q1",
+          "selected_option_index": 2,
+          "answered_at": "2023-10-27T11:05:00Z",
+          "question": {
+            "id": "q1",
+            "question_text": "What is the capital of France?",
+            "image_url": "https://img.com/question-image.jpg",
+            "options": [
+              {
+                "id": "opt1",
+                "option_index": 1,
+                "option_text": "London"
+              },
+              {
+                "id": "opt2",
+                "option_index": 2,
+                "option_text": "Paris"
+              },
+              {
+                "id": "opt3",
+                "option_index": 3,
+                "option_text": "Berlin"
+              },
+              {
+                "id": "opt4",
+                "option_index": 4,
+                "option_text": "Madrid"
+              }
+            ],
+            "topic": {
+              "id": "topic-1",
+              "name": "Geography"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "timestamp": "2023-10-27T11:00:00Z"
+}
+```
+
+**Key Differences by Status**:
+- **SUBMITTED/EXPIRED**: Includes `is_correct`, `correct_answer_index`, `explanation_latex`, `video_solution_url`
+- **IN_PROGRESS**: Excludes sensitive data to prevent cheating during active attempts
+
+**Errors**:
+- `401`: Missing or invalid authentication token
+- `403`: Access denied - can only view own attempts or admin access required
+- `404`: User not found
+
 ## Get Exam Analytics (Admin Only)
 
 ### GET /analytics/exams/:id

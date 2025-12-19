@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Exam } from '../../types';
-import { Timer } from '../Timer';
 import { LaTeX } from '../LaTeX';
 import { attemptApi } from '../../lib/api';
 import { TextWithLaTeX } from '../TextWithLaTeX';
+import { ExamTimer } from '../ExamTimer';
+import { AlertCircle } from 'lucide-react';
 
 interface ExamInterfaceProps {
   exam: Exam;
@@ -20,43 +21,147 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(true);
   const [examQuestions, setExamQuestions] = useState<any[]>([]);
+  const [totalTimeSeconds, setTotalTimeSeconds] = useState<number>(0);
+  const [isTimeUp, setIsTimeUp] = useState(false);
+  const [uiLocked, setUiLocked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hasAutoSubmitted = useRef(false);
+  const hasInitialized = useRef(false); // Prevent double initialization
+
+  // Auto-submit when time expires (idempotent) - DEFINED BEFORE USE
+  const handleAutoSubmit = useCallback(async (attemptIdToSubmit: string) => {
+    if (hasAutoSubmitted.current) {
+      console.log('Auto-submit already in progress, skipping');
+      return;
+    }
+    
+    hasAutoSubmitted.current = true;
+    setIsSubmitting(true);
+    setUiLocked(true);
+    
+    try {
+      console.log('Auto-submitting exam due to time expiry:', attemptIdToSubmit);
+      
+      // Submit null answers for all unattempted questions before final submit
+      const answeredQuestionIds = Object.keys(answers);
+      const unattemptedQuestions = examQuestions.filter(q => !answeredQuestionIds.includes(q.id));
+      
+      if (unattemptedQuestions.length > 0) {
+        console.log(`Auto-submit: Submitting ${unattemptedQuestions.length} unattempted questions with null answers`);
+        for (const question of unattemptedQuestions) {
+          try {
+            await attemptApi.submitAnswer(attemptIdToSubmit, {
+              question_id: question.id,
+              selected_option_index: null,
+            });
+          } catch (err) {
+            console.error(`Failed to submit null answer for question ${question.id}:`, err);
+            // Continue with other questions even if one fails
+          }
+        }
+      }
+      
+      await attemptApi.submit(attemptIdToSubmit);
+      
+      setIsSubmitted(true);
+      
+      // Small delay to show "time's up" message before redirect
+      setTimeout(() => {
+        onSubmit({ attemptId: attemptIdToSubmit });
+      }, 2000);
+    } catch (err: any) {
+      console.error('Error auto-submitting exam:', err);
+      
+      // Show error but still navigate (backend may have processed it despite error)
+      setError(`Submission error: ${err.message || 'Unknown error'}. Checking results...`);
+      setIsSubmitted(true);
+      
+      // Still navigate after delay - let results page handle the actual state
+      setTimeout(() => {
+        onSubmit({ attemptId: attemptIdToSubmit });
+      }, 2000);
+    }
+  }, [answers, examQuestions, onSubmit]);
+
+  // Handle time up event from ExamTimer
+  const handleTimeUp = useCallback(() => {
+    if (hasAutoSubmitted.current || !attemptId) return;
+    
+    console.log('Time is up! Initiating auto-submit...');
+    setIsTimeUp(true);
+    setUiLocked(true); // Lock UI immediately to prevent further interactions
+    handleAutoSubmit(attemptId);
+  }, [attemptId, handleAutoSubmit]);
 
   // Start the exam attempt when component mounts
   useEffect(() => {
+    // Prevent double initialization (React 18 Strict Mode runs effects twice in dev)
+    if (hasInitialized.current) {
+      console.log('⚠️ Skipping duplicate initialization');
+      return;
+    }
+    
+    hasInitialized.current = true;
+    
     const startExamAttempt = async () => {
       try {
         console.log('Starting exam attempt for exam:', exam.id);
         
-        // Start the attempt - now includes questions in response
+        // Start the attempt - includes questions in response according to API spec
         const attemptResponse = await attemptApi.start(exam.id);
-        console.log('Attempt started with questions:', attemptResponse);
+        console.log('Attempt started with response:', attemptResponse);
+        
         setAttemptId(attemptResponse.id);
         
-        // Extract questions from the new response structure
+        // Check if exam is already finished
+        if (attemptResponse.status === 'SUBMITTED') {
+          console.log('Exam already submitted, redirecting to results');
+          setIsSubmitted(true);
+          onSubmit({ attemptId: attemptResponse.id });
+          return;
+        }
+        
+        // Store total_time_seconds for timer
+        if (attemptResponse.total_time_seconds) {
+          console.log('🔥 Backend response:', {
+            attemptId: attemptResponse.id,
+            status: attemptResponse.status,
+            total_time_seconds: attemptResponse.total_time_seconds
+          });
+          setTotalTimeSeconds(attemptResponse.total_time_seconds);
+        } else {
+          throw new Error('No total_time_seconds received from backend');
+        }
+        
+        // Extract questions from the start response according to API spec
         if (attemptResponse.questions && attemptResponse.questions.length > 0) {
           const questions = attemptResponse.questions.map((q: any) => {
-            // Handle options - could be array of strings or array of objects
-            let options = q.question.options || [];
+            // According to API spec, structure is: { questionSetPosition, questionPosition, question: {...} }
+            const questionData = q.question;
+            
+            // Handle options - according to spec, they're an array of strings
+            let options = questionData.options || [];
+            
+            // If options are objects (from database), extract the text and sort by option_index
             if (options.length > 0 && typeof options[0] === 'object') {
-              // If options are objects, extract the text and sort by option_index
               options = options
                 .sort((a: any, b: any) => (a.option_index || 0) - (b.option_index || 0))
                 .map((opt: any) => opt.option_text || opt.text || String(opt));
             }
             
             return {
-              id: q.question.id,
-              question_text: q.question.question_text || q.question.text,
-              question_latex: q.question.question_latex,
-              image_url: q.question.image_url,
+              id: questionData.id,
+              question_text: questionData.text || questionData.question_text,
+              question_latex: questionData.question_latex,
+              image_url: questionData.image_url,
               options: options,
-              topic: q.question.topic?.name || 'Unknown',
-              marks: q.question.marks || 1
+              topic: questionData.topic?.name || 'Unknown',
+              marks: questionData.marks || 1
             };
           });
           
           console.log('Extracted questions from start response:', questions);
-          console.log('First question options:', questions[0]?.options);
+          console.log('First question:', questions[0]);
           setExamQuestions(questions);
           
           if (questions.length === 0) {
@@ -67,15 +172,42 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
         }
         
         setIsStarting(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error starting exam:', error);
-        alert('Failed to start exam. Please refresh and try again.');
+        setError(error.message || 'Failed to start exam. Please refresh and try again.');
         setIsStarting(false);
       }
     };
 
     startExamAttempt();
   }, [exam.id]);
+
+  // Backup safety check: Periodically verify time hasn't expired (every 10 seconds)
+  // This ensures auto-submit happens even if timer component has issues
+  useEffect(() => {
+    if (!attemptId || !totalTimeSeconds || isSubmitted || hasAutoSubmitted.current) {
+      return;
+    }
+
+    const timerStartKey = `exam_timer_start_${attemptId}`;
+    
+    const checkTimeExpiry = () => {
+      const startTime = localStorage.getItem(timerStartKey);
+      if (!startTime) return;
+      
+      const elapsed = Math.floor((Date.now() - parseInt(startTime)) / 1000);
+      
+      if (elapsed >= totalTimeSeconds && !hasAutoSubmitted.current && !isTimeUp) {
+        console.log('Safety check: Time expired, triggering auto-submit');
+        setIsTimeUp(true);
+        setUiLocked(true);
+        handleAutoSubmit(attemptId);
+      }
+    };
+
+    const interval = setInterval(checkTimeExpiry, 10000); // Check every 10 seconds
+    return () => clearInterval(interval);
+  }, [totalTimeSeconds, isSubmitted, isTimeUp, attemptId, handleAutoSubmit]);
 
   // Show loading while starting the exam
   if (isStarting) {
@@ -111,6 +243,9 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
   const currentQuestion = examQuestions[currentQuestionIndex];
 
   const handleAnswer = async (questionId: string, answerIndex: number) => {
+    // Don't allow answers if UI is locked (time expired)
+    if (uiLocked || isTimeUp || isSubmitted || isSubmitting) return;
+
     // Update local state
     setAnswers(prev => ({
       ...prev,
@@ -127,53 +262,83 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
           question_id: questionId,
           selected_option_index: backendIndex,
         });
-      } catch (error) {
-        console.error('Error submitting answer:', error);
+      } catch (err: any) {
+        console.error('Error submitting answer:', err);
         // Don't alert on every answer error, just log it
       }
     }
   };
 
+  // Manual submit exam
   const handleSubmit = async () => {
-    if (isSubmitted || isSubmitting || !attemptId) return;
+    if (isSubmitted || isSubmitting || !attemptId || uiLocked) return;
 
     setIsSubmitting(true);
+    setUiLocked(true); // Lock UI during submission
     
     try {
       console.log('Submitting exam attempt:', attemptId);
-      // Submit the exam attempt to finalize it
+      
+      // Submit null answers for all unattempted questions
+      const answeredQuestionIds = Object.keys(answers);
+      const unattemptedQuestions = examQuestions.filter(q => !answeredQuestionIds.includes(q.id));
+      
+      if (unattemptedQuestions.length > 0) {
+        console.log(`Submitting ${unattemptedQuestions.length} unattempted questions with null answers`);
+        for (const question of unattemptedQuestions) {
+          try {
+            await attemptApi.submitAnswer(attemptId, {
+              question_id: question.id,
+              selected_option_index: null,
+            });
+          } catch (err) {
+            console.error(`Failed to submit null answer for question ${question.id}:`, err);
+            // Continue with other questions even if one fails
+          }
+        }
+      }
+      
+      // Submit the exam attempt to finalize it (idempotent)
       await attemptApi.submit(attemptId);
       
       setIsSubmitted(true);
       
       // Notify parent component with attemptId for navigation
       onSubmit({ attemptId });
-    } catch (error) {
-      console.error('Error submitting exam:', error);
-      alert('Failed to submit exam. Please try again.');
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleTimeUp = () => {
-    if (!isSubmitted) {
-      handleSubmit();
+    } catch (err: any) {
+      console.error('Error submitting exam:', err);
+      // Handle 410 Gone - attempt already expired/submitted
+      if (err.message?.includes('410') || err.message?.includes('expired') || err.message?.includes('already submitted')) {
+        setError('This exam has already been submitted or expired.');
+        setIsSubmitted(true);
+        onSubmit({ attemptId });
+      } else {
+        // Don't show alert for auto-submission on time up
+        if (!isTimeUp) {
+          alert('Failed to submit exam. Please try again.');
+        }
+        setIsSubmitting(false);
+        setUiLocked(false);
+      }
     }
   };
 
   const nextQuestion = () => {
+    if (uiLocked || isTimeUp) return;
     if (currentQuestionIndex < examQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     }
   };
 
   const prevQuestion = () => {
+    if (uiLocked || isTimeUp) return;
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
     }
   };
 
   const goToQuestion = (index: number) => {
+    if (uiLocked || isTimeUp) return;
     setCurrentQuestionIndex(index);
   };
 
@@ -194,11 +359,15 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
                 {studentName} • {studentEmail}
               </p>
             </div>
-            <Timer 
-              duration={Math.floor(exam.time_limit_seconds / 60)} 
-              onTimeUp={handleTimeUp}
-              className="flex-shrink-0"
-            />
+            {attemptId && totalTimeSeconds > 0 && (
+              <ExamTimer 
+                totalTimeSeconds={totalTimeSeconds}
+                attemptId={attemptId}
+                onTimeUp={handleTimeUp}
+                showWarnings={true}
+                className="flex-shrink-0"
+              />
+            )}
           </div>
           
           {/* Progress Bar */}
@@ -218,8 +387,36 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 md:py-10">
+        {/* Time Up Banner */}
+        {isTimeUp && (
+          <div className="mb-6 bg-red-100 border-2 border-red-500 rounded-xl p-6 text-center animate-pulse">
+            <div className="flex items-center justify-center gap-3 text-red-700 mb-2">
+              <AlertCircle className="w-8 h-8" />
+              <span className="text-2xl font-bold">⏰ TIME'S UP!</span>
+            </div>
+            <p className="text-red-600 text-lg font-medium">
+              {isSubmitting ? 'Submitting your exam automatically...' : 'Your exam has been submitted.'}
+            </p>
+            {isSubmitting && (
+              <div className="mt-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto"></div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Question Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div className={`bg-white rounded-2xl shadow-xl border overflow-hidden ${
+          isTimeUp ? 'border-red-200 opacity-75' : 'border-gray-100'
+        }`}>
           {/* Question Header */}
           <div className="bg-gradient-to-r from-indigo-500 to-purple-500 px-4 sm:px-6 py-4 sm:py-5">
             <div className="flex items-center justify-between">
@@ -283,7 +480,8 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
                       value={optionIndex}
                       checked={answers[currentQuestion.id] === optionIndex}
                       onChange={() => handleAnswer(currentQuestion.id, optionIndex)}
-                      className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 mr-3 sm:mr-4 mt-0.5 sm:mt-0 flex-shrink-0"
+                      disabled={uiLocked || isTimeUp || isSubmitted || isSubmitting}
+                      className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 mr-3 sm:mr-4 mt-0.5 sm:mt-0 flex-shrink-0 disabled:opacity-50"
                     />
                     <div className={`text-sm sm:text-base md:text-lg flex-1 ${
                       answers[currentQuestion.id] === optionIndex ? 'text-gray-900 font-medium' : 'text-gray-700'
@@ -299,7 +497,7 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 pt-4 sm:pt-6 border-t border-gray-200">
               <button
                 onClick={prevQuestion}
-                disabled={currentQuestionIndex === 0}
+                disabled={currentQuestionIndex === 0 || uiLocked || isTimeUp || isSubmitted}
                 className="px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold text-gray-700 bg-gray-100 border-2 border-gray-300 rounded-xl hover:bg-gray-200 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow"
               >
                 ← Previous
@@ -309,15 +507,16 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
                 {currentQuestionIndex === examQuestions.length - 1 ? (
                   <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isSubmitted || uiLocked}
                     className="flex-1 sm:flex-none px-8 py-3 sm:py-3.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 font-semibold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmitting ? 'Submitting...' : '✓ Submit Exam'}
+                    {isSubmitting ? 'Submitting...' : isTimeUp ? '⏰ Time Up - Submitting...' : '✓ Submit Exam'}
                   </button>
                 ) : (
                   <button
                     onClick={nextQuestion}
-                    className="flex-1 sm:flex-none px-8 py-3 sm:py-3.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 font-semibold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                    disabled={uiLocked || isTimeUp || isSubmitted}
+                    className="flex-1 sm:flex-none px-8 py-3 sm:py-3.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 font-semibold text-sm sm:text-base shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next →
                   </button>
@@ -336,7 +535,8 @@ export function ExamInterface({ exam, studentName, studentEmail, onSubmit }: Exa
                 <button
                   key={index}
                   onClick={() => goToQuestion(index)}
-                  className={`aspect-square flex items-center justify-center text-xs font-semibold rounded-lg transition-all duration-200 ${
+                  disabled={uiLocked || isTimeUp || isSubmitted}
+                  className={`aspect-square flex items-center justify-center text-xs font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                     currentQuestionIndex === index
                       ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-md scale-110'
                       : answers[question.id] !== undefined

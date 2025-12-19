@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { attemptApi } from '../lib/api';
-import { CheckCircle, XCircle, Clock, User, ArrowLeft, RotateCcw } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, User, ArrowLeft, RotateCcw, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export function ExamResultsPage() {
@@ -201,6 +201,17 @@ export function ExamResultsPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Home
           </button>
+          
+          {/* Review Exam Button - Only for completed attempts */}
+          {(attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED') && (
+            <button
+              onClick={() => navigate(`/exam-review/${attemptId}`)}
+              className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+            >
+              <Eye className="w-4 h-4" />
+              Review Answers & Learn
+            </button>
+          )}
           
           {examLink && (
             <button

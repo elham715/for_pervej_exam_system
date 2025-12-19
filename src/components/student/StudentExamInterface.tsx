@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { examApi, attemptApi } from '../../lib/api';
 import { 
-  Clock, 
   AlertCircle, 
   ChevronRight, 
   ChevronLeft, 
@@ -11,6 +10,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { TextWithLaTeX } from '../TextWithLaTeX';
+import { ExamTimer } from '../ExamTimer';
 
 interface StudentExamInterfaceProps {
   examId?: string;
@@ -58,15 +58,19 @@ interface Exam {
 export function StudentExamInterface({ examId, examLink, onComplete }: StudentExamInterfaceProps) {
   const [exam, setExam] = useState<Exam | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [totalTimeSeconds, setTotalTimeSeconds] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   // Exam state
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Map<string, number | null>>(new Map());
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTimeUp, setIsTimeUp] = useState(false);
   const [showQuestionGrid, setShowQuestionGrid] = useState(false);
+  const [uiLocked, setUiLocked] = useState(false); // Lock UI when time expires
+  const hasAutoSubmitted = useRef(false);
+  const hasInitialized = useRef(false); // Prevent double initialization
 
   // Flatten all questions from exam
   const allQuestions: Question[] = exam?.exam_question_sets
@@ -79,6 +83,14 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
 
   // Load exam and start attempt
   useEffect(() => {
+    // Prevent double initialization (React 18 Strict Mode runs effects twice in dev)
+    if (hasInitialized.current) {
+      console.log('⚠️ Skipping duplicate initialization');
+      return;
+    }
+    
+    hasInitialized.current = true;
+    
     const init = async () => {
       try {
         setLoading(true);
@@ -96,17 +108,30 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
         
         setExam(examData);
 
-        // Start attempt
+        // Start or resume attempt
         const attempt = await attemptApi.start(examData.id);
+        
+        // Check if attempt is already finished
+        if (attempt.status === 'SUBMITTED') {
+          console.log('Exam already finished, redirecting to results');
+          if (onComplete) {
+            onComplete(attempt.id);
+          }
+          return;
+        }
+        
         setAttemptId(attempt.id);
         
-        // Calculate time remaining
-        if (attempt.expires_at) {
-          const expiresAt = new Date(attempt.expires_at).getTime();
-          const now = Date.now();
-          setTimeRemaining(Math.max(0, Math.floor((expiresAt - now) / 1000)));
+        // Store total_time_seconds for timer
+        if (attempt.total_time_seconds) {
+          console.log('🔥 Backend response:', {
+            attemptId: attempt.id,
+            status: attempt.status,
+            total_time_seconds: attempt.total_time_seconds
+          });
+          setTotalTimeSeconds(attempt.total_time_seconds);
         } else {
-          setTimeRemaining(examData.time_limit_seconds);
+          throw new Error('No total_time_seconds received from backend');
         }
 
       } catch (err: any) {
@@ -120,34 +145,104 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
     init();
   }, [examId, examLink]);
 
-  // Timer countdown
-  useEffect(() => {
-    if (timeRemaining === null || timeRemaining <= 0) return;
-
-    const interval = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (prev === null || prev <= 0) {
-          handleAutoSubmit();
-          return 0;
+  // Auto-submit when time expires (idempotent) - DEFINED BEFORE USE
+  const handleAutoSubmit = useCallback(async (attemptIdToSubmit: string) => {
+    if (hasAutoSubmitted.current) {
+      console.log('Auto-submit already in progress, skipping');
+      return;
+    }
+    
+    hasAutoSubmitted.current = true;
+    setIsSubmitting(true);
+    setUiLocked(true);
+    
+    try {
+      console.log('Auto-submitting exam due to time expiry:', attemptIdToSubmit);
+      
+      // Submit null answers for all unattempted questions before final submit
+      const unattemptedQuestions = allQuestions.filter(q => !answers.has(q.id));
+      if (unattemptedQuestions.length > 0) {
+        console.log(`Auto-submit: Submitting ${unattemptedQuestions.length} unattempted questions with null answers`);
+        for (const question of unattemptedQuestions) {
+          try {
+            await attemptApi.submitAnswer(attemptIdToSubmit, {
+              question_id: question.id,
+              selected_option_index: null,
+            });
+          } catch (err) {
+            console.error(`Failed to submit null answer for question ${question.id}:`, err);
+            // Continue with other questions even if one fails
+          }
         }
-        return prev - 1;
-      });
-    }, 1000);
+      }
+      
+      await attemptApi.submit(attemptIdToSubmit);
+      
+      // Small delay to show "time's up" message before redirect
+      setTimeout(() => {
+        if (onComplete) {
+          onComplete(attemptIdToSubmit);
+        } else {
+          alert('Time expired! Your exam has been automatically submitted.');
+          window.location.href = '/';
+        }
+      }, 2000);
+    } catch (err: any) {
+      console.error('Error auto-submitting exam:', err);
+      // Even if auto-submit fails, still try to navigate (backend may have already submitted)
+      setTimeout(() => {
+        if (onComplete) {
+          onComplete(attemptIdToSubmit);
+        } else {
+          window.location.href = '/';
+        }
+      }, 2000);
+    }
+  }, [allQuestions, answers, onComplete]);
 
+  // Backup safety check: Periodically verify time hasn't expired (every 10 seconds)
+  // This ensures auto-submit happens even if timer component has issues or tab was closed
+  useEffect(() => {
+    if (!attemptId || !totalTimeSeconds || isSubmitting || hasAutoSubmitted.current) {
+      return;
+    }
+
+    const timerStartKey = `exam_timer_start_${attemptId}`;
+
+    const checkTimeExpiry = () => {
+      const startTime = localStorage.getItem(timerStartKey);
+      if (!startTime) return;
+      
+      const elapsed = Math.floor((Date.now() - parseInt(startTime)) / 1000);
+      
+      if (elapsed >= totalTimeSeconds && !hasAutoSubmitted.current && !isTimeUp) {
+        console.log('Safety check: Time expired, triggering auto-submit');
+        setIsTimeUp(true);
+        setUiLocked(true);
+        handleAutoSubmit(attemptId);
+      }
+    };
+
+    const interval = setInterval(checkTimeExpiry, 10000); // Check every 10 seconds
     return () => clearInterval(interval);
-  }, [timeRemaining]);
+  }, [totalTimeSeconds, isSubmitting, isTimeUp, attemptId, handleAutoSubmit]);
 
-  // Format time
-  const formatTime = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Handle time up event from ExamTimer
+  const handleTimeUp = useCallback(() => {
+    if (hasAutoSubmitted.current || !attemptId) return;
+    
+    console.log('Time is up! Initiating auto-submit...');
+    setIsTimeUp(true);
+    setUiLocked(true); // Lock UI immediately to prevent further interactions
+    handleAutoSubmit(attemptId);
+  }, [attemptId, handleAutoSubmit]);
 
   // Handle answer selection
   const handleSelectAnswer = async (optionIndex: number) => {
-    if (!attemptId || !currentQuestion) return;
+    // Don't allow answer changes if UI is locked (time expired)
+    if (uiLocked || !attemptId || !currentQuestion || isTimeUp) {
+      return;
+    }
 
     const newAnswers = new Map(answers);
     const currentAnswer = answers.get(currentQuestion.id);
@@ -169,8 +264,9 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
     }
   };
 
-  // Navigation
+  // Navigation - disabled when UI is locked
   const goToNextQuestion = () => {
+    if (uiLocked || isTimeUp) return;
     if (currentQuestionIndex < allQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setShowQuestionGrid(false);
@@ -178,6 +274,7 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
   };
 
   const goToPreviousQuestion = () => {
+    if (uiLocked || isTimeUp) return;
     if (currentQuestionIndex > 0) {
       setCurrentQuestionIndex(currentQuestionIndex - 1);
       setShowQuestionGrid(false);
@@ -185,16 +282,17 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
   };
 
   const goToQuestion = (index: number) => {
+    if (uiLocked || isTimeUp) return;
     setCurrentQuestionIndex(index);
     setShowQuestionGrid(false);
   };
 
-  // Submit exam
+  // Manual submit exam
   const handleSubmit = useCallback(async () => {
-    if (!attemptId || isSubmitting) return;
+    if (!attemptId || isSubmitting || uiLocked) return;
 
     const unanswered = allQuestions.length - answers.size;
-    if (unanswered > 0) {
+    if (unanswered > 0 && !isTimeUp) {
       const confirmed = window.confirm(
         `You have ${unanswered} unanswered question(s). Do you want to submit anyway?`
       );
@@ -203,8 +301,29 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
 
     try {
       setIsSubmitting(true);
+      setUiLocked(true); // Lock UI during submission
       setError(null);
       
+      console.log('Submitting exam attempt:', attemptId);
+      
+      // Submit null answers for all unattempted questions
+      const unattemptedQuestions = allQuestions.filter(q => !answers.has(q.id));
+      if (unattemptedQuestions.length > 0) {
+        console.log(`Submitting ${unattemptedQuestions.length} unattempted questions with null answers`);
+        for (const question of unattemptedQuestions) {
+          try {
+            await attemptApi.submitAnswer(attemptId, {
+              question_id: question.id,
+              selected_option_index: null,
+            });
+          } catch (err) {
+            console.error(`Failed to submit null answer for question ${question.id}:`, err);
+            // Continue with other questions even if one fails
+          }
+        }
+      }
+      
+      // Now submit the attempt
       await attemptApi.submit(attemptId);
       
       if (onComplete) {
@@ -214,30 +333,20 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
         window.location.href = '/'; // Redirect to home
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to submit exam');
-      console.error('Error submitting exam:', err);
-      setIsSubmitting(false);
-    }
-  }, [attemptId, isSubmitting, allQuestions.length, answers.size, onComplete]);
-
-  // Auto-submit when time expires
-  const handleAutoSubmit = useCallback(async () => {
-    if (!attemptId || isSubmitting) return;
-    
-    try {
-      setIsSubmitting(true);
-      await attemptApi.submit(attemptId);
-      alert('Time expired! Your exam has been automatically submitted.');
-      
-      if (onComplete) {
-        onComplete(attemptId);
+      // Handle submission errors
+      if (err.message?.includes('already submitted')) {
+        setError('This exam has already been submitted.');
+        if (onComplete) {
+          onComplete(attemptId);
+        }
       } else {
-        window.location.href = '/';
+        setError(err.message || 'Failed to submit exam');
+        console.error('Error submitting exam:', err);
+        setIsSubmitting(false);
+        setUiLocked(false);
       }
-    } catch (err: any) {
-      console.error('Error auto-submitting exam:', err);
     }
-  }, [attemptId, isSubmitting, onComplete]);
+  }, [attemptId, isSubmitting, uiLocked, allQuestions, answers, isTimeUp, onComplete]);
 
   // Loading state
   if (loading) {
@@ -301,20 +410,19 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
             
             {/* Timer */}
             <div className="flex items-center gap-4">
-              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                timeRemaining !== null && timeRemaining < 300
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-blue-100 text-blue-700'
-              }`}>
-                <Clock className="w-5 h-5" />
-                <span className="text-lg font-mono font-bold">
-                  {timeRemaining !== null ? formatTime(timeRemaining) : '--:--:--'}
-                </span>
-              </div>
+              {attemptId && totalTimeSeconds && (
+                <ExamTimer 
+                  totalTimeSeconds={totalTimeSeconds}
+                  attemptId={attemptId}
+                  onTimeUp={handleTimeUp}
+                  showWarnings={true}
+                />
+              )}
 
               <button
                 onClick={() => setShowQuestionGrid(!showQuestionGrid)}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                disabled={uiLocked}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Grid3x3 className="w-5 h-5" />
                 <span className="font-medium">Questions</span>
@@ -389,6 +497,24 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Time's Up Banner */}
+        {isTimeUp && (
+          <div className="mb-6 bg-red-100 border-2 border-red-500 rounded-xl p-6 text-center animate-pulse">
+            <div className="flex items-center justify-center gap-3 text-red-700 mb-2">
+              <AlertCircle className="w-8 h-8" />
+              <span className="text-2xl font-bold">⏰ TIME'S UP!</span>
+            </div>
+            <p className="text-red-600 text-lg font-medium">
+              {isSubmitting ? 'Submitting your exam automatically...' : 'Your exam has been submitted.'}
+            </p>
+            {isSubmitting && (
+              <div className="mt-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto"></div>
+              </div>
+            )}
+          </div>
+        )}
+        
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
             <AlertCircle className="w-5 h-5" />
@@ -446,11 +572,12 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
                     <button
                       key={option.option_index}
                       onClick={() => handleSelectAnswer(option.option_index)}
+                      disabled={uiLocked || isTimeUp}
                       className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
                         isSelected
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-300 bg-white hover:border-blue-300 hover:bg-blue-50'
-                      }`}
+                      } ${(uiLocked || isTimeUp) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-3">
                         <div className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -476,7 +603,7 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
             <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
               <button
                 onClick={goToPreviousQuestion}
-                disabled={currentQuestionIndex === 0}
+                disabled={currentQuestionIndex === 0 || uiLocked}
                 className="flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -486,13 +613,18 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
               {currentQuestionIndex === allQuestions.length - 1 ? (
                 <button
                   onClick={handleSubmit}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || uiLocked}
                   className="flex items-center gap-2 px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
                 >
                   {isSubmitting ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                       Submitting...
+                    </>
+                  ) : isTimeUp ? (
+                    <>
+                      <AlertCircle className="w-5 h-5" />
+                      Time Expired
                     </>
                   ) : (
                     <>
@@ -504,7 +636,8 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
               ) : (
                 <button
                   onClick={goToNextQuestion}
-                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={uiLocked}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Next
                   <ChevronRight className="w-5 h-5" />
@@ -513,15 +646,17 @@ export function StudentExamInterface({ examId, examLink, onComplete }: StudentEx
             </div>
 
             {/* Submit Button (always visible) */}
-            <div className="mt-4 text-center">
-              <button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-              >
-                {isSubmitting ? 'Submitting...' : 'Submit Exam Early'}
-              </button>
-            </div>
+            {!isTimeUp && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || uiLocked}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit Exam Early'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

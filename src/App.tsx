@@ -12,6 +12,8 @@ import { ExamPage } from './pages/ExamPage';
 import { ExamResultsPage } from './pages/ExamResultsPage';
 import { AnalyticsTestPage } from './pages/AnalyticsTestPage';
 import { UserPerformancePage } from './pages/UserPerformancePage';
+import { StudentExamReviewPage } from './pages/StudentExamReviewPage';
+import { AdminExamReviewPage } from './pages/AdminExamReviewPage';
 import { GraduationCap, BarChart3 } from 'lucide-react';
 
 function App() {
@@ -152,6 +154,18 @@ function App() {
                 <UserPerformancePage />
               </ProtectedRoute>
             } 
+          />
+          <Route 
+            path="/admin/exam-review/:attemptId" 
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <AdminExamReviewPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/exam-review/:attemptId" 
+            element={<StudentExamReviewPage />} 
           />
           
           {/* Fallback */}

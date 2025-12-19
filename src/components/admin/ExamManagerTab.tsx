@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { examApi, questionSetApi } from '../../lib/api';
-import { Plus, Edit2, Trash2, Calendar, AlertCircle, Clock, Link2, ChevronRight, Users, Eye, X, FileText, List } from 'lucide-react';
+import { Plus, Edit2, Trash2, Calendar, AlertCircle, Clock, Link2, ChevronRight, Users, Eye, X, FileText, List, BarChart3 } from 'lucide-react';
 import { LaTeX } from '../LaTeX';
 import { TextWithLaTeX } from '../TextWithLaTeX';
 
@@ -23,6 +24,7 @@ interface QuestionSet {
 }
 
 export const ExamManagerTab = () => {
+  const navigate = useNavigate();
   const [exams, setExams] = useState<Exam[]>([]);
   const [questionSets, setQuestionSets] = useState<QuestionSet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,7 @@ export const ExamManagerTab = () => {
   const [viewAttemptsId, setViewAttemptsId] = useState<string | null>(null);
   const [attempts, setAttempts] = useState<any[]>([]);
   const [previewExam, setPreviewExam] = useState<Exam | null>(null);
+  const [attemptsTab, setAttemptsTab] = useState<'list' | 'analysis'>('list');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -311,7 +314,7 @@ export const ExamManagerTab = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Exam Attempts</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Exam Analysis</h2>
             <p className="text-gray-600 mt-1">Exam: {currentExam?.title}</p>
           </div>
           <button
@@ -332,55 +335,131 @@ export const ExamManagerTab = () => {
           </div>
         )}
 
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {attempts.length === 0 ? (
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-lg shadow-md p-1 inline-flex gap-1">
+          <button
+            onClick={() => setAttemptsTab('list')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              attemptsTab === 'list'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Attempts List
+          </button>
+          <button
+            onClick={() => setAttemptsTab('analysis')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              attemptsTab === 'analysis'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Detailed Question Analysis
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {attemptsTab === 'list' ? (
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                    No attempts yet
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
-              ) : (
-                attempts.map(attempt => (
-                  <tr key={attempt.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{attempt.user?.name}</div>
-                      <div className="text-sm text-gray-500">{attempt.user?.email}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        attempt.status === 'SUBMITTED' ? 'bg-green-100 text-green-800' :
-                        attempt.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {attempt.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {attempt.score !== null ? `${attempt.score?.toFixed(1)}%` : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {new Date(attempt.started_at).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : 'Not submitted'}
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {attempts.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                      No attempts yet
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  attempts.map(attempt => (
+                    <tr key={attempt.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900">{attempt.user?.name}</div>
+                        <div className="text-sm text-gray-500">{attempt.user?.email}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          attempt.status === 'SUBMITTED' ? 'bg-green-100 text-green-800' :
+                          attempt.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {attempt.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {attempt.score !== null ? `${attempt.score?.toFixed(1)}%` : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {new Date(attempt.started_at).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString() : 'Not submitted'}
+                      </td>
+                      <td className="px-6 py-4">
+                        {attempt.status === 'SUBMITTED' && (
+                          <button
+                            onClick={() => navigate(`/admin/exam-review/${attempt.id}`)}
+                            className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm"
+                          >
+                            <Eye className="w-4 h-4" />
+                            Review
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="text-center py-12">
+              <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Detailed Question Analysis</h3>
+              <p className="text-gray-600 mb-6">
+                Analyze question performance, common mistakes, and topic-wise statistics for this exam.
+              </p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="text-2xl font-bold text-blue-900">{attempts.length}</div>
+                    <div className="text-blue-700">Total Attempts</div>
+                  </div>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="text-2xl font-bold text-green-900">
+                      {attempts.filter(a => a.status === 'SUBMITTED').length}
+                    </div>
+                    <div className="text-green-700">Completed</div>
+                  </div>
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="text-2xl font-bold text-orange-900">
+                      {attempts.length > 0 ? 
+                        Math.round(attempts.filter(a => a.score !== null).reduce((sum, a) => sum + (a.score || 0), 0) / attempts.filter(a => a.score !== null).length) || 0
+                        : 0}%
+                    </div>
+                    <div className="text-orange-700">Average Score</div>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Click on individual student attempts in the "Attempts List" tab to view detailed question-by-question analysis.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -829,16 +908,15 @@ export const ExamManagerTab = () => {
                                         {q.question.topic.name}
                                       </span>
                                     )}
-                                    {q.question?.question_text && (
+                                    {q.question?.question_latex ? (
+                                      <div className="bg-gray-50 p-3 rounded border border-gray-200 mb-2">
+                                        <LaTeX>{q.question.question_latex}</LaTeX>
+                                      </div>
+                                    ) : q.question?.question_text ? (
                                       <div className="text-gray-900 font-medium mb-2">
                                         <TextWithLaTeX text={q.question.question_text} />
                                       </div>
-                                    )}
-                                    {q.question?.question_latex && (
-                                      <div className="bg-gray-50 p-3 rounded border border-gray-200 mb-2">
-                                        <LaTeX latex={q.question.question_latex} />
-                                      </div>
-                                    )}
+                                    ) : null}
                                     {q.question?.question_image_url && (
                                       <img 
                                         src={q.question.question_image_url} 
@@ -874,11 +952,6 @@ export const ExamManagerTab = () => {
                                               <div className="flex-1">
                                                 {option.option_text && (
                                                   <TextWithLaTeX text={option.option_text} />
-                                                )}
-                                                {option.option_latex && (
-                                                  <div className="mt-1">
-                                                    <LaTeX latex={option.option_latex} />
-                                                  </div>
                                                 )}
                                                 {option.option_image_url && (
                                                   <img 

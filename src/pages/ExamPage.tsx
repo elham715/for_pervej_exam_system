@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { examApi } from '../lib/api';
+import { examApi, attemptApi } from '../lib/api';
 import { User, Clock, AlertCircle, LogIn } from 'lucide-react';
 import { ExamInterface } from '../components/student/ExamInterface';
 import { Exam } from '../types';
@@ -19,6 +19,7 @@ export function ExamPage() {
   const [error, setError] = useState<string | null>(null);
   const [exam, setExam] = useState<ExamData | null>(null);
   const [showForm, setShowForm] = useState(true);
+  const [checkingExistingAttempt, setCheckingExistingAttempt] = useState(true);
 
   useEffect(() => {
     loadExam();
@@ -28,6 +29,7 @@ export function ExamPage() {
     if (!examLink) {
       setError('No exam link provided');
       setLoading(false);
+      setCheckingExistingAttempt(false);
       return;
     }
 
@@ -40,11 +42,72 @@ export function ExamPage() {
         questions: [], // Questions will be loaded when exam starts
         question_sets: []
       } as ExamData);
+      
+      // Check if there's an ongoing attempt with active timer
+      if (currentUser) {
+        await checkForOngoingAttempt(examData.id);
+      } else {
+        setCheckingExistingAttempt(false);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load exam');
       console.error('Error loading exam:', err);
+      setCheckingExistingAttempt(false);
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const checkForOngoingAttempt = async (examId: string) => {
+    try {
+      // Try to get or create an attempt
+      const attempt = await attemptApi.start(examId);
+      
+      // Check if there's a timer running in localStorage
+      const timerStartKey = `exam_timer_start_${attempt.id}`;
+      const existingTimer = localStorage.getItem(timerStartKey);
+      
+      if (existingTimer && attempt.status === 'IN_PROGRESS') {
+        // Calculate if timer is still valid
+        const elapsed = Math.floor((Date.now() - parseInt(existingTimer)) / 1000);
+        const remaining = Math.max(0, attempt.total_time_seconds - elapsed);
+        
+        if (remaining > 0) {
+          console.log('🔄 Found ongoing attempt with active timer - skipping start screen', {
+            attemptId: attempt.id,
+            elapsed,
+            remaining
+          });
+          setShowForm(false); // Skip the form, go directly to exam
+        } else {
+          console.log('⏰ Found expired attempt - clearing old timer and showing start screen');
+          // Timer expired but not submitted yet - clear old timer
+          localStorage.removeItem(timerStartKey);
+          setShowForm(true);
+        }
+      } else if (attempt.status === 'IN_PROGRESS' && !existingTimer) {
+        // This is a fresh IN_PROGRESS attempt with no timer yet
+        // Clear any old timer data for this exam (in case of previous attempts)
+        console.log('🆕 Fresh IN_PROGRESS attempt with no timer - showing start screen');
+        
+        // Clear all old exam timers (just in case)
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('exam_timer_start_') && key !== timerStartKey) {
+            console.log('🧹 Clearing old timer:', key);
+            localStorage.removeItem(key);
+          }
+        });
+        
+        setShowForm(true);
+      } else {
+        console.log('📋 Attempt status:', attempt.status);
+        setShowForm(true);
+      }
+    } catch (err) {
+      console.error('Error checking for ongoing attempt:', err);
+      setShowForm(true); // Show form on error
+    } finally {
+      setCheckingExistingAttempt(false);
     }
   };
 
@@ -68,13 +131,15 @@ export function ExamPage() {
     }
   };
 
-  // Show loading while checking authentication
-  if (authLoading || loading) {
+  // Show loading while checking authentication or existing attempt
+  if (authLoading || loading || checkingExistingAttempt) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading exam...</p>
+          <p className="text-gray-600">
+            {checkingExistingAttempt ? 'Checking for ongoing exam...' : 'Loading exam...'}
+          </p>
         </div>
       </div>
     );

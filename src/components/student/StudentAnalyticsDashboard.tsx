@@ -1,27 +1,30 @@
 import { useState, useEffect } from 'react';
-import { analyticsApi } from '../../lib/api';
+import { analyticsApi, attemptApi } from '../../lib/api';
 import { EnhancedAnalyticsService } from '../../lib/enhancedAnalytics';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   FileText, 
   CheckCircle, 
-  Clock,
   BarChart3,
   Award,
   Target,
   Activity,
   TrendingUp,
-  Calendar
+  Calendar,
+  Eye
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export function StudentAnalyticsDashboard() {
   const { userData } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   // Student analytics
   const [userPerformance, setUserPerformance] = useState<any>(null);
   const [topicPerformance, setTopicPerformance] = useState<any[]>([]);
+  const [myAttempts, setMyAttempts] = useState<any[]>([]);
 
   useEffect(() => {
     loadAnalytics();
@@ -45,7 +48,6 @@ export function StudentAnalyticsDashboard() {
       if (dashboardData.userPerformance) {
         setUserPerformance(dashboardData.userPerformance);
       }
-
       // Try to load user-specific topic analytics
       try {
         const topics = await analyticsApi.getUserTopicPerformance(userData.id);
@@ -53,6 +55,20 @@ export function StudentAnalyticsDashboard() {
       } catch (err: any) {
         console.warn('Could not load user topic performance:', err);
         setTopicPerformance([]);
+      }
+
+      // Load all user's attempts directly from API
+      try {
+        const attempts = await attemptApi.getMyAttempts();
+        // Filter only submitted/expired attempts
+        const completedAttempts = attempts.filter(
+          (attempt) => attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED'
+        );
+        setMyAttempts(completedAttempts);
+        console.log('Loaded attempts:', completedAttempts);
+      } catch (err: any) {
+        console.warn('Could not load user attempts:', err);
+        setMyAttempts([]);
       }
 
     } catch (err: any) {
@@ -149,19 +165,6 @@ export function StudentAnalyticsDashboard() {
                 <CheckCircle className="w-10 h-10 text-purple-500" />
               </div>
             </div>
-
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Avg Time</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {userPerformance.averageTimeSpent}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">minutes per exam</p>
-                </div>
-                <Clock className="w-10 h-10 text-orange-500" />
-              </div>
-            </div>
           </div>
 
           {/* Performance Trend */}
@@ -201,56 +204,8 @@ export function StudentAnalyticsDashboard() {
             </div>
           )}
 
-          {/* Topic Performance */}
-          {Array.isArray(topicPerformance) && topicPerformance.length > 0 && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Subject-wise Performance</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {topicPerformance.map((topic, idx) => (
-                  <div key={topic?.topic_id ?? topic?.topic_name ?? idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="font-medium text-gray-900">{topic.topic_name}</h5>
-                      <Target className="w-5 h-5 text-gray-400" />
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Accuracy</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full ${
-                                topic.accuracy_percentage >= 80 ? 'bg-green-500' :
-                                topic.accuracy_percentage >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${topic.accuracy_percentage ?? 0}%` }}
-                            ></div>
-                          </div>
-                          <span className="font-semibold text-gray-900 text-sm">
-                            {(topic.accuracy_percentage ?? 0).toFixed(1)}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Questions Answered</span>
-                        <span className="font-semibold text-gray-900">
-                          {topic.correct_answers}/{topic.total_questions_attempted}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Avg Time per Question</span>
-                        <span className="font-semibold text-gray-900">
-                          {topic.average_time_per_question_seconds}s
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Recent Exam History */}
-          {userPerformance.recentAttempts && Array.isArray(userPerformance.recentAttempts) && userPerformance.recentAttempts.length > 0 && (
+          {myAttempts && myAttempts.length > 0 && (
             <div className="bg-white rounded-lg shadow-md p-6">
               <h4 className="text-lg font-semibold text-gray-900 mb-4">Recent Exam History</h4>
               <div className="overflow-x-auto">
@@ -263,42 +218,61 @@ export function StudentAnalyticsDashboard() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time Taken</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {userPerformance.recentAttempts.map((attempt: any, idx: number) => (
-                      <tr key={attempt?.attemptId ?? `attempt-${idx}`} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {attempt.examTitle}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className={`font-semibold ${
-                            attempt.scorePercentage >= 80 ? 'text-green-600' :
-                            attempt.scorePercentage >= 60 ? 'text-yellow-600' : 'text-red-600'
-                          }`}>
-                            {(attempt.scorePercentage ?? 0).toFixed(1)}%
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {attempt.score}/{attempt.totalQuestions}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {attempt.timeTaken} min
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {attempt.completedAt ? new Date(attempt.completedAt).toLocaleDateString() : 'In Progress'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            attempt.status === 'SUBMITTED' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {attempt.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {myAttempts.map((attempt: any, idx: number) => {
+                      const scorePercentage = attempt.total_questions > 0 
+                        ? ((attempt.score || 0) / attempt.total_questions) * 100 
+                        : 0;
+                      const timeTaken = attempt.time_taken_seconds 
+                        ? Math.floor(attempt.time_taken_seconds / 60) 
+                        : 0;
+                      
+                      return (
+                        <tr key={attempt?.id ?? `attempt-${idx}`} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {attempt.exam?.title || 'Unknown Exam'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <span className={`font-semibold ${
+                              scorePercentage >= 80 ? 'text-green-600' :
+                              scorePercentage >= 60 ? 'text-yellow-600' : 'text-red-600'
+                            }`}>
+                              {scorePercentage.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {attempt.score ?? 0}/{attempt.total_questions ?? 0}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {timeTaken} min
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              attempt.status === 'SUBMITTED' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {attempt.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <button
+                              onClick={() => navigate(`/exam-review/${attempt.id}`)}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium"
+                            >
+                              <Eye className="w-3 h-3" />
+                              Review
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

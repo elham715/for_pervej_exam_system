@@ -1,0 +1,805 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { analyticsApi } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+import { 
+  ArrowLeft, 
+  Trophy, 
+  Clock, 
+  Target, 
+  BookOpen,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Eye,
+  PlayCircle
+} from 'lucide-react';
+
+export function StudentExamReviewPage() {
+  const { attemptId } = useParams<{ attemptId: string }>();
+  const navigate = useNavigate();
+  const { userData } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attemptDetails, setAttemptDetails] = useState<any>(null);
+  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string>('all');
+
+  useEffect(() => {
+    if (attemptId && userData?.id) {
+      loadAttemptDetails();
+    }
+  }, [attemptId, userData?.id]);
+
+  const loadAttemptDetails = async () => {
+    if (!attemptId || !userData?.id) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Get detailed attempts for current user
+      const detailedAttempts = await analyticsApi.getUserDetailedAttempts(userData.id, { take: 100 });
+      
+      // Find the specific attempt
+      const attempt = detailedAttempts.find(a => a.id === attemptId);
+      
+      if (attempt) {
+        setAttemptDetails(attempt);
+      } else {
+        setError('Exam attempt not found or access denied');
+      }
+    } catch (err: any) {
+      console.error('Error loading attempt details:', err);
+      setError(err.message || 'Failed to load exam review');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getPerformanceColor = (score: number | null) => {
+    if (!score) return 'text-gray-600 bg-gray-100';
+    if (score >= 80) return 'text-green-600 bg-green-100';
+    if (score >= 60) return 'text-yellow-600 bg-yellow-100';
+    return 'text-red-600 bg-red-100';
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'SUBMITTED':
+        return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case 'EXPIRED':
+        return <XCircle className="w-4 h-4 text-red-600" />;
+      default:
+        return <AlertCircle className="w-4 h-4 text-gray-600" />;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading exam review...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !attemptDetails) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Unable to Load Review</h2>
+          <p className="text-gray-600 mb-4">{error || 'Exam review not available'}</p>
+          <button
+            onClick={() => navigate('/admin/dashboard')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const correctAnswers = attemptDetails.exam_answers?.filter((a: any) => a.is_correct).length || 0;
+  const totalQuestions = attemptDetails.exam_answers?.length || 0;
+  const incorrectAnswers = totalQuestions - correctAnswers;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <Eye className="w-6 h-6 text-blue-600" />
+                  Exam Review: {attemptDetails.exam?.title}
+                </h1>
+                <p className="text-gray-600">Learn from your answers and improve your understanding</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {getStatusIcon(attemptDetails.status)}
+              <span className="text-sm font-medium text-gray-600">{attemptDetails.status}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Performance Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Final Score</p>
+                <p className={`text-2xl font-bold ${getPerformanceColor(attemptDetails.score).split(' ')[0]}`}>
+                  {attemptDetails.score?.toFixed(1) || '0.0'}%
+                </p>
+              </div>
+              <Trophy className="w-8 h-8 text-yellow-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Correct Answers</p>
+                <p className="text-2xl font-bold text-green-600">{correctAnswers}</p>
+              </div>
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Incorrect Answers</p>
+                <p className="text-2xl font-bold text-red-600">{incorrectAnswers}</p>
+              </div>
+              <XCircle className="w-8 h-8 text-red-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Time Taken</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {Math.floor((attemptDetails.time_taken_seconds || 0) / 60)}m
+                </p>
+              </div>
+              <Clock className="w-8 h-8 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        {/* Topics Overview */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Target className="w-5 h-5 text-purple-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Topics Covered in This Exam</h3>
+          </div>
+          
+          {(() => {
+            // Group all questions by topic with performance stats
+            const topicStats = attemptDetails.exam_answers?.reduce((acc: any, answer: any) => {
+              const topicName = answer.question.topic?.name || 'Unknown Topic';
+              const topicId = answer.question.topic?.id || 'unknown';
+              
+              if (!acc[topicId]) {
+                acc[topicId] = {
+                  name: topicName,
+                  total: 0,
+                  correct: 0,
+                  incorrect: 0,
+                  questions: []
+                };
+              }
+              
+              acc[topicId].total++;
+              acc[topicId].questions.push({
+                id: answer.question.id,
+                text: answer.question.question_text,
+                isCorrect: answer.is_correct
+              });
+              
+              if (answer.is_correct) {
+                acc[topicId].correct++;
+              } else {
+                acc[topicId].incorrect++;
+              }
+              
+              return acc;
+            }, {}) || {};
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.values(topicStats).map((topic: any, index: number) => {
+                  const accuracy = topic.total > 0 ? (topic.correct / topic.total) * 100 : 0;
+                  const accuracyColor = accuracy >= 80 ? 'text-green-600' : accuracy >= 60 ? 'text-yellow-600' : 'text-red-600';
+                  const borderColor = accuracy >= 80 ? 'border-green-200' : accuracy >= 60 ? 'border-yellow-200' : 'border-red-200';
+                  const bgColor = accuracy >= 80 ? 'bg-green-50' : accuracy >= 60 ? 'bg-yellow-50' : 'bg-red-50';
+                  
+                  return (
+                    <div key={index} className={`border-2 ${borderColor} ${bgColor} rounded-lg p-4`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-blue-600" />
+                          {topic.name}
+                        </h4>
+                        <span className={`text-sm font-bold ${accuracyColor}`}>
+                          {accuracy.toFixed(0)}%
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Total Questions:</span>
+                          <span className="font-medium">{topic.total}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-green-600">Correct:</span>
+                          <span className="font-medium text-green-600">{topic.correct}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-red-600">Incorrect:</span>
+                          <span className="font-medium text-red-600">{topic.incorrect}</span>
+                        </div>
+                        
+                        {/* Progress bar */}
+                        <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              accuracy >= 80 ? 'bg-green-500' : accuracy >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${accuracy}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Questions Review */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-900">Question-by-Question Review</h3>
+              <span className="text-sm text-gray-500">
+                ({attemptDetails.exam_answers?.length || 0} questions total)
+              </span>
+            </div>
+            
+            {/* Quick Navigation */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Jump to:</span>
+              <button
+                onClick={() => {
+                  const incorrectElement = document.querySelector('[data-question-status="incorrect"]');
+                  incorrectElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200 transition-colors"
+              >
+                First Mistake
+              </button>
+              <button
+                onClick={() => {
+                  const topicsSection = document.querySelector('[data-section="topics-mistakes"]');
+                  topicsSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="px-3 py-1 bg-orange-100 text-orange-700 rounded-lg text-sm hover:bg-orange-200 transition-colors"
+              >
+                Study Plan
+              </button>
+            </div>
+          </div>
+
+          {/* Topic Filter */}
+          {attemptDetails.exam_answers && attemptDetails.exam_answers.length > 0 && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="text-sm font-medium text-gray-700">Filter by topic:</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setSelectedTopicFilter('all')}
+                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                      selectedTopicFilter === 'all'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    All Topics ({attemptDetails.exam_answers.length})
+                  </button>
+                  <button
+                    onClick={() => setSelectedTopicFilter('incorrect')}
+                    className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                      selectedTopicFilter === 'incorrect'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-white text-red-700 border border-red-300 hover:bg-red-50'
+                    }`}
+                  >
+                    Mistakes Only ({incorrectAnswers})
+                  </button>
+                  {(() => {
+                    const uniqueTopics = Array.from(new Set(
+                      attemptDetails.exam_answers.map((answer: any) => answer.question.topic?.name || 'Unknown')
+                    )) as string[];
+                    
+                    return uniqueTopics.map((topicName: string) => {
+                      const topicQuestions = attemptDetails.exam_answers.filter(
+                        (answer: any) => (answer.question.topic?.name || 'Unknown') === topicName
+                      );
+                      
+                      return (
+                        <button
+                          key={topicName}
+                          onClick={() => setSelectedTopicFilter(topicName)}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                            selectedTopicFilter === topicName
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-white text-purple-700 border border-purple-300 hover:bg-purple-50'
+                          }`}
+                        >
+                          {topicName} ({topicQuestions.length})
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+          </div>
+
+          {attemptDetails.exam_answers && attemptDetails.exam_answers.length > 0 ? (
+            <div className="space-y-8">
+              {attemptDetails.exam_answers
+                .filter((answerData: any) => {
+                  if (selectedTopicFilter === 'all') return true;
+                  if (selectedTopicFilter === 'incorrect') return !answerData.is_correct;
+                  return (answerData.question.topic?.name || 'Unknown') === selectedTopicFilter;
+                })
+                .map((answerData: any, filteredIndex: number) => {
+                  // Get the original index for proper question numbering
+                  const originalIndex = attemptDetails.exam_answers.findIndex((a: any) => a.id === answerData.id);
+                const question = answerData.question;
+                const isCorrect = answerData.is_correct;
+                const selectedIndex = answerData.selected_option_index;
+                
+                // Debug logging
+                console.log(`Question ${originalIndex + 1} data:`, {
+                  questionId: question.id,
+                  hasExplanation: !!question.explanation_latex,
+                  hasVideo: !!question.video_solution_url,
+                  explanation: question.explanation_latex,
+                  video: question.video_solution_url
+                });
+
+                return (
+                  <div 
+                    key={answerData.id} 
+                    data-question-status={isCorrect ? 'correct' : 'incorrect'}
+                    data-question-topic={question.topic?.name || 'unknown'}
+                    className={`border-2 rounded-lg p-6 scroll-mt-20 ${
+                      isCorrect 
+                        ? 'border-green-200 bg-green-50' 
+                        : 'border-red-200 bg-red-50'
+                    }`}
+                  >
+                    {/* Question Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <span className={`flex items-center justify-center w-8 h-8 rounded-full text-white font-bold ${
+                          isCorrect ? 'bg-green-500' : 'bg-red-500'
+                        }`}>
+                          {originalIndex + 1}
+                        </span>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                              isCorrect 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                            </span>
+                            {question.topic && (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                <BookOpen className="w-3 h-3 mr-1" />
+                                {question.topic.name}
+                              </span>
+                            )}
+                          </div>
+                          {/* Question difficulty or additional metadata could go here */}
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>Question ID: {question.id}</span>
+                            {question.difficulty && (
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                question.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                                question.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>
+                                {question.difficulty}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {answerData.answered_at && new Date(answerData.answered_at).toLocaleString()}
+                      </div>
+                    </div>
+
+                    {/* Question Text */}
+                    <div className="mb-4">
+                      <h5 className="font-medium text-gray-900 text-lg mb-2">
+                        {question.question_text || 'Question text not available'}
+                      </h5>
+                      {question.image_url && (
+                        <div className="mb-4">
+                          <img
+                            src={question.image_url}
+                            alt="Question"
+                            className="max-w-full h-auto rounded-lg border border-gray-200"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Answer Options */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                      {question.options?.map((option: any) => {
+                        const isSelected = selectedIndex === option.option_index;
+                        const isCorrectOption = question.correct_answer_index === option.option_index;
+                        
+                        return (
+                          <div 
+                            key={option.id}
+                            className={`p-4 rounded-lg border-2 transition-all ${
+                              isSelected && isCorrect
+                                ? 'border-green-400 bg-green-100'
+                                : isSelected && !isCorrect
+                                ? 'border-red-400 bg-red-100'
+                                : isCorrectOption
+                                ? 'border-green-300 bg-green-50'
+                                : 'border-gray-200 bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                isSelected && isCorrect
+                                  ? 'bg-green-500 text-white'
+                                  : isSelected && !isCorrect
+                                  ? 'bg-red-500 text-white'
+                                  : isCorrectOption
+                                  ? 'bg-green-400 text-white'
+                                  : 'bg-gray-300 text-gray-600'
+                              }`}>
+                                {String.fromCharCode(64 + option.option_index)}
+                              </div>
+                              <span className="flex-1 text-sm">{option.option_text}</span>
+                              <div className="flex items-center gap-1">
+                                {isSelected && (
+                                  <span className="text-xs font-medium text-blue-600">Your Answer</span>
+                                )}
+                                {isCorrectOption && (
+                                  <CheckCircle className="w-4 h-4 text-green-600" />
+                                )}
+                                {isSelected && !isCorrect && (
+                                  <XCircle className="w-4 h-4 text-red-600" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Performance Feedback */}
+                    <div className="mb-4">
+                      <div className="p-4 bg-white rounded-lg border-2 border-gray-200">
+                        <div className="text-sm">
+                          {isCorrect ? (
+                            <p className="text-green-800">
+                              <strong>✓ Well done!</strong> You selected the correct answer.
+                            </p>
+                          ) : (
+                            <div className="text-red-800">
+                              <p className="mb-1">
+                                <strong>✗ Incorrect.</strong> You selected option {selectedIndex ? String.fromCharCode(64 + selectedIndex) : 'None'}.
+                              </p>
+                              {question.correct_answer_index && (
+                                <p className="text-green-700">
+                                  <strong>Correct answer:</strong> Option {String.fromCharCode(64 + question.correct_answer_index)} - {question.options?.find((opt: any) => opt.option_index === question.correct_answer_index)?.option_text}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Learning Resources */}
+                    <div className="space-y-4">
+                      {/* Explanation */}
+                      {question.explanation_latex ? (
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <h6 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                            <BookOpen className="w-4 h-4" />
+                            Explanation
+                          </h6>
+                          <div className="text-sm text-blue-800 leading-relaxed">
+                            {question.explanation_latex}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                          <h6 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                            <BookOpen className="w-4 h-4" />
+                            Explanation
+                          </h6>
+                          <p className="text-sm text-gray-600 italic">
+                            No explanation available for this question yet.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Video Solution */}
+                      {question.video_solution_url ? (
+                        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                          <h6 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                            <PlayCircle className="w-4 h-4" />
+                            Video Solution
+                          </h6>
+                          <p className="text-sm text-purple-800 mb-3">
+                            Watch this video for a detailed step-by-step solution to this question.
+                          </p>
+                          <a
+                            href={question.video_solution_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                          >
+                            <PlayCircle className="w-4 h-4" />
+                            Watch Solution Video
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                          <h6 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                            <PlayCircle className="w-4 h-4" />
+                            Video Solution
+                          </h6>
+                          <p className="text-sm text-gray-600 italic">
+                            No video solution available for this question yet.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Topic Explanation Video */}
+                      {question.topic?.explanation_video_url ? (
+                        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                          <h6 className="font-semibold text-indigo-900 mb-3 flex items-center gap-2">
+                            <BookOpen className="w-4 h-4" />
+                            Learn More About: {question.topic.name}
+                          </h6>
+                          <p className="text-sm text-indigo-800 mb-3">
+                            Watch this comprehensive video to understand the fundamentals of {question.topic.name}.
+                          </p>
+                          <a
+                            href={question.topic.explanation_video_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                          >
+                            <PlayCircle className="w-4 h-4" />
+                            Learn {question.topic.name} Basics
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                          <h6 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                            <BookOpen className="w-4 h-4" />
+                            Topic: {question.topic?.name || 'Unknown'}
+                          </h6>
+                          <p className="text-sm text-gray-600 italic">
+                            No topic explanation video available yet.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Debug Info - Remove after testing */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                          <strong>Debug:</strong> explanation_latex: {question.explanation_latex ? 'exists' : 'null/undefined'}, 
+                          video_solution_url: {question.video_solution_url ? 'exists' : 'null/undefined'},
+                          topic_video: {question.topic?.explanation_video_url ? 'exists' : 'null/undefined'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600">No question data available for review.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Topics with Mistakes */}
+        {incorrectAnswers > 0 && (
+          <div data-section="topics-mistakes" className="mt-8 bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-lg shadow-md p-6 scroll-mt-20">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-lg font-semibold text-red-900 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                Topics Requiring Your Attention
+              </h4>
+              <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
+                {incorrectAnswers} mistake{incorrectAnswers !== 1 ? 's' : ''} to review
+              </span>
+            </div>
+            <p className="text-red-800 text-sm mb-6">
+              Focus your study efforts on these topics where you made mistakes. Each topic includes targeted learning resources to help you improve.
+            </p>
+            
+            {(() => {
+              // Group incorrect answers by topic
+              const incorrectByTopic = attemptDetails.exam_answers
+                ?.filter((answer: any) => !answer.is_correct)
+                .reduce((acc: any, answer: any) => {
+                  const topicName = answer.question.topic?.name || 'Unknown Topic';
+                  const topicId = answer.question.topic?.id || 'unknown';
+                  const topicVideoUrl = answer.question.topic?.explanation_video_url;
+                  
+                  if (!acc[topicId]) {
+                    acc[topicId] = {
+                      name: topicName,
+                      videoUrl: topicVideoUrl,
+                      questions: [],
+                      count: 0
+                    };
+                  }
+                  
+                  acc[topicId].questions.push({
+                    id: answer.question.id,
+                    text: answer.question.question_text,
+                    selectedAnswer: answer.question.options?.find((opt: any) => opt.option_index === answer.selected_option_index)?.option_text,
+                    correctAnswer: answer.question.options?.find((opt: any) => opt.option_index === answer.question.correct_answer_index)?.option_text
+                  });
+                  acc[topicId].count++;
+                  
+                  return acc;
+                }, {}) || {};
+
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {Object.values(incorrectByTopic).map((topic: any, index: number) => (
+                    <div key={index} className="border-2 border-red-300 rounded-lg p-5 bg-white shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between mb-4">
+                        <h5 className="font-bold text-red-900 flex items-center gap-2 text-lg">
+                          <BookOpen className="w-5 h-5 text-red-600" />
+                          {topic.name}
+                        </h5>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                            {topic.count} mistake{topic.count !== 1 ? 's' : ''}
+                          </span>
+                          <AlertCircle className="w-5 h-5 text-red-500" />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3 mb-5">
+                        {topic.questions.map((q: any, qIndex: number) => (
+                          <div key={q.id} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                            <div className="flex items-start gap-2 mb-2">
+                              <span className="flex-shrink-0 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                {qIndex + 1}
+                              </span>
+                              <p className="text-gray-800 font-medium text-sm leading-relaxed">
+                                {q.text.length > 80 ? q.text.substring(0, 80) + '...' : q.text}
+                              </p>
+                            </div>
+                            <div className="ml-8 space-y-1">
+                              <div className="flex items-center gap-2 text-xs">
+                                <XCircle className="w-3 h-3 text-red-500" />
+                                <span className="text-red-700">
+                                  Your answer: <strong>{q.selectedAnswer || 'No answer'}</strong>
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs">
+                                <CheckCircle className="w-3 h-3 text-green-500" />
+                                <span className="text-green-700">
+                                  Correct answer: <strong>{q.correctAnswer}</strong>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Topic Learning Resources */}
+                      <div className="space-y-2">
+                        {topic.videoUrl ? (
+                          <a
+                            href={topic.videoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium w-full justify-center"
+                          >
+                            <PlayCircle className="w-4 h-4" />
+                            Learn {topic.name} Fundamentals
+                          </a>
+                        ) : (
+                          <div className="text-center p-2 bg-gray-100 rounded text-xs text-gray-600">
+                            No topic video available
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Study Recommendations */}
+        {incorrectAnswers > 0 && (
+          <div className="mt-8 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg p-6">
+            <h4 className="font-semibold text-orange-900 mb-3 flex items-center gap-2">
+              <Target className="w-5 h-5" />
+              Study Recommendations
+            </h4>
+            <div className="text-sm text-orange-800">
+              <p className="mb-2">
+                You got {incorrectAnswers} question{incorrectAnswers !== 1 ? 's' : ''} wrong across {Object.keys(
+                  attemptDetails.exam_answers
+                    ?.filter((answer: any) => !answer.is_correct)
+                    .reduce((acc: any, answer: any) => {
+                      const topicName = answer.question.topic?.name || 'Unknown';
+                      acc[topicName] = true;
+                      return acc;
+                    }, {}) || {}
+                ).length} topic{Object.keys(
+                  attemptDetails.exam_answers
+                    ?.filter((answer: any) => !answer.is_correct)
+                    .reduce((acc: any, answer: any) => {
+                      const topicName = answer.question.topic?.name || 'Unknown';
+                      acc[topicName] = true;
+                      return acc;
+                    }, {}) || {}
+                ).length !== 1 ? 's' : ''}. Here's how to improve:
+              </p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Review the explanations for incorrect answers above</li>
+                <li>Watch the video solutions for better understanding</li>
+                <li>Focus on the topics highlighted in the "Topics with Mistakes" section</li>
+                <li>Watch the topic fundamental videos to strengthen your foundation</li>
+                <li>Practice similar questions to reinforce learning</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

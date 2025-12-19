@@ -818,8 +818,7 @@ interface AttemptResponse {
   exam_id: string;
   user_id: string;
   status: 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED';
-  started_at: string;
-  expires_at?: string;
+  total_time_seconds: number;
   submitted_at?: string;
   completed_at?: string;
   score?: number;
@@ -1000,6 +999,53 @@ interface ImprovementTrend {
   improvement_rate: number;
 }
 
+interface DetailedAttempt {
+  id: string;
+  exam_id: string;
+  user_id: string;
+  status: 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED';
+  score: number;
+  total_questions: number;
+  time_taken_seconds: number;
+  started_at: string;
+  submitted_at: string | null;
+  exam: {
+    id: string;
+    title: string;
+    time_limit_seconds: number;
+  };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  exam_answers: Array<{
+    id: string;
+    question_id: string;
+    selected_option_index: number | null;
+    is_correct?: boolean; // Only present for SUBMITTED/EXPIRED attempts
+    answered_at: string;
+    question: {
+      id: string;
+      question_text: string;
+      correct_answer_index?: number; // Only present for SUBMITTED/EXPIRED attempts
+      explanation_latex?: string; // Only present for SUBMITTED/EXPIRED attempts
+      video_solution_url?: string; // Only present for SUBMITTED/EXPIRED attempts
+      image_url?: string;
+      options: Array<{
+        id: string;
+        option_index: number;
+        option_text: string;
+      }>;
+      topic: {
+        id: string;
+        name: string;
+        explanation_video_url?: string; // Only present for SUBMITTED/EXPIRED attempts
+      };
+    };
+  }>;
+}
+
 interface ExamAnalytics {
   exam_id: string;
   exam_title: string;
@@ -1105,6 +1151,24 @@ export const analyticsApi = {
   getUserTrend: async (userId: string): Promise<ImprovementTrend> => {
     return apiCall<ImprovementTrend>(`/analytics/users/${userId}/trend`);
   },
+
+  /**
+   * Get detailed user attempts with questions and answers (Admin only)
+   * GET /analytics/users/:userId/attempts/detailed
+   */
+  getUserDetailedAttempts: async (userId: string, params?: { skip?: number; take?: number }): Promise<DetailedAttempt[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.skip !== undefined) queryParams.append('skip', params.skip.toString());
+    if (params?.take !== undefined) queryParams.append('take', params.take.toString());
+    
+    const endpoint = queryParams.toString() 
+      ? `/analytics/users/${userId}/attempts/detailed?${queryParams.toString()}` 
+      : `/analytics/users/${userId}/attempts/detailed`;
+    
+    return apiCall<DetailedAttempt[]>(endpoint);
+  },
+
+
 
   /**
    * Get exam analytics (Admin only)
